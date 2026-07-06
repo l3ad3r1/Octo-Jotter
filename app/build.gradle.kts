@@ -10,11 +10,11 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.l3ad3r1.octojotter"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.gistnotes.vxlmra"
+    applicationId = "com.l3ad3r1.octojotter"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
