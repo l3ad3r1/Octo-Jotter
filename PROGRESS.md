@@ -60,10 +60,28 @@ v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
   https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.1
 - In-app updater verified: installed v1.0 now sees v1.1; shipped v1.1 reports up-to-date.
 
-### Deferred: full two-way repo sync (owner approved, NOT yet started)
-Plan when resumed: NoteEntity repo fields (+DB v7) / RepoPreferences DataStore /
-GithubApiService trees+blobs+contents PUT / NoteRepository pull+push per repo /
-Settings repo-picker UI. PAT needs `repo` scope. No code written yet.
+### Repo-sync feature: BUILT (2026-07-06) — compiles clean
+History: `main` was rolled back to the clean v1.1 base (old Backup, 2612b37); the
+discarded commits had regressed the package back to `com.example`. Old main
+recoverable at SHA 7728fb4 until GC. Then built two-way GitHub repository sync:
+- NoteEntity: repository/path/sha columns; AppDatabase v7 + additive MIGRATION_6_7.
+- NoteDao: gist sync scoped to `repository IS NULL`; getNotesToSyncForRepository +
+  getNoteByRepoAndPath.
+- GithubApiService: getGitTree / getGitBlob / createOrUpdateFile (PUT) /
+  deleteRepoFile (DELETE+body), path-segment encoded.
+- RepoPreferences DataStore: repo list + selected; defaults FIXED to l3ad3r1/*
+  (renjacob10000/* was the root-cause 404). PAT needs `repo` scope (repos private).
+- NoteRepository: pullFromRepository (main->master fallback, .md by blob sha,
+  keeps dirty notes) / pushToRepository (conflict-safe sha + 409/422 retry) /
+  deleteNoteFromRepository.
+- NoteViewModel: repositories/selectedRepository state + syncRepositoryNow().
+- Settings: Repository Sync card (chips to select, add/remove, Sync button).
+DESIGN NOTE: repo push/pull is MANUAL only; background auto-sync stays gist-only
+so real knowledge-base repos aren't auto-committed on every edit.
+VERIFIED: `:app:assembleDebug` — kspDebugKotlin (Room v7 migration + Moshi) clean,
+zero compile errors. (debug.keystore is gitignored; regenerate via keytool if absent.)
+NEXT: on-device test pull of l3ad3r1/Dronehire-second-brain with a repo-scoped PAT;
+then decide on optional background repo sync + version/release bump.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
