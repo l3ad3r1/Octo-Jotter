@@ -11,12 +11,21 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 - Wired androidx core-splashscreen: Theme.OctoJotter.Starting + installSplashScreen().
 - Created release keystore (my-upload-key.jks) + debug.keystore (both gitignored).
 
+- Built signed release APK: app/build/outputs/apk/release/app-release.apk
+  (18.7 MB, v2-signed, applicationId com.l3ad3r1.octojotter, label "Octo Jotter").
+- Wrote README + pushed all commits to origin/main.
+
 ## In progress
-- Building signed release APK.
+- Awaiting user go-ahead to publish a GitHub Release (v1.0) with the APK
+  (blocked by permission classifier — not explicitly requested).
 
 ## Next steps
-1. Build signed release APK (env: STORE_PASSWORD/KEY_PASSWORD=octojotter).
-2. Write README + docs, push to GitHub.
+1. (Optional) `gh release create v1.0 <apk> --repo l3ad3r1/Octo-Jotter` once approved.
+
+## Signing keys (KEEP SAFE — gitignored, not in repo)
+- my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
+  to sign all future release updates; losing it blocks Play Store updates.
+- debug.keystore — standard debug key (android/android).
 
 ## Notes
 - Build env: `JAVA_HOME=/c/Program Files/Android/Android Studio/jbr`, `ANDROID_HOME` already set.
