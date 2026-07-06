@@ -92,6 +92,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -2144,29 +2145,6 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                             Icon(Icons.Default.Add, contentDescription = "Add repository")
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = { viewModel.syncRepositoryNow() },
-                        enabled = token.isNotEmpty() && selectedRepository != null && !isSyncing,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .testTag("repo_sync_button")
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Syncing...")
-                        } else {
-                            Icon(Icons.Default.Sync, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sync Repository (Pull & Push)")
-                        }
-                    }
                 }
             }
 
@@ -2181,36 +2159,24 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        listOf(
-                            "system" to "System Default",
-                            "light" to "Light",
-                            "dark" to "Dark"
-                        ).forEach { (mode, label) ->
-                            FilterChip(
-                                selected = themeMode == mode,
-                                onClick = { viewModel.setThemeMode(mode) },
-                                label = { Text(label) },
-                                leadingIcon = if (themeMode == mode) {
-                                    {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("theme_chip_$mode")
-                            )
-                        }
+                        Text(
+                            text = "Dark mode",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Switch(
+                            checked = themeMode == "dark",
+                            onCheckedChange = { isDark ->
+                                viewModel.setThemeMode(if (isDark) "dark" else "light")
+                            },
+                            modifier = Modifier.testTag("theme_toggle")
+                        )
                     }
                 }
             }
@@ -2424,25 +2390,6 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "How to generate a Personal Access Token (Classic):",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Text(
-                text = "1. Log in to GitHub.com\n" +
-                        "2. Go to Settings -> Developer Settings\n" +
-                        "3. Select Personal Access Tokens -> Tokens (classic)\n" +
-                        "4. Click Generate new token -> Generate new token (classic)\n" +
-                        "5. Give it a name and check the 'gist' scope checkbox\n" +
-                        "6. Generate, copy, and paste it here.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                lineHeight = 18.sp
-            )
         }
     }
 }
