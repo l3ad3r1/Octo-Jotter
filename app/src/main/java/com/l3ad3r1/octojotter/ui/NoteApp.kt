@@ -1849,9 +1849,13 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
     val themeMode by viewModel.themeMode.collectAsState()
     val exportStatus by viewModel.exportStatus.collectAsState()
 
+    val repositories by viewModel.repositories.collectAsState()
+    val selectedRepository by viewModel.selectedRepository.collectAsState()
+
     var inputToken by remember { mutableStateOf("") }
     var tokenVisible by remember { mutableStateOf(false) }
     var showClearTokenConfirm by remember { mutableStateOf(false) }
+    var newRepoInput by remember { mutableStateOf("") }
 
     // Synchronize local input field with stored token on first load
     LaunchedEffect(token) {
@@ -1922,7 +1926,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "To synchronize your offline notes with your GitHub Gists, you need to configure a GitHub Personal Access Token (PAT) with Gist permissions.",
+                        text = "To sync your notes, configure a GitHub Personal Access Token (PAT). Use the `gist` scope for Gist sync, and the `repo` scope to sync whole repositories below.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2057,6 +2061,114 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            // ---- Repository Sync (folder-based, GitHub repos) ----
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth().testTag("repo_sync_card")
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Repository Sync",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Sync Markdown files from a whole GitHub repository (owner/repo). Private repos require a token with the `repo` scope.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    repositories.forEach { repo ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = repo == selectedRepository,
+                                onClick = { viewModel.selectRepository(repo) },
+                                label = { Text(repo, maxLines = 1) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("repo_chip_$repo")
+                            )
+                            IconButton(
+                                onClick = { viewModel.deleteRepository(repo) },
+                                modifier = Modifier.testTag("repo_delete_$repo")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove $repo",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = newRepoInput,
+                            onValueChange = { newRepoInput = it },
+                            label = { Text("owner/repo") },
+                            placeholder = { Text("l3ad3r1/my-notes") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("repo_input")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = {
+                                if (newRepoInput.isNotBlank()) {
+                                    viewModel.addRepository(newRepoInput)
+                                    newRepoInput = ""
+                                }
+                            },
+                            modifier = Modifier.testTag("repo_add_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add repository")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { viewModel.syncRepositoryNow() },
+                        enabled = token.isNotEmpty() && selectedRepository != null && !isSyncing,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("repo_sync_button")
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Syncing...")
+                        } else {
+                            Icon(Icons.Default.Sync, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Sync Repository (Pull & Push)")
+                        }
+                    }
+                }
+            }
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
