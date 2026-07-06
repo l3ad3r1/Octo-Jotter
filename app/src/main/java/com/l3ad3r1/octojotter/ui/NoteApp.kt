@@ -837,7 +837,7 @@ fun NotesListScreen(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Text(
-                                                text = "Modified: ${formatTimestamp(note.lastModifiedLocally)}",
+                                                text = formatRelativeTimestamp(note.lastModifiedLocally),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                             )
@@ -2588,6 +2588,18 @@ fun parseInlineStyles(text: String, colors: OctoStatusColors): AnnotatedString {
 fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
     return sdf.format(Date(timestamp))
+}
+
+// Compact, locale-aware relative time for list cards ("2 hours ago", "Yesterday").
+fun formatRelativeTimestamp(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    if (timestamp <= 0L || timestamp > now) return formatTimestamp(timestamp)
+    return android.text.format.DateUtils.getRelativeTimeSpanString(
+        timestamp,
+        now,
+        android.text.format.DateUtils.MINUTE_IN_MILLIS,
+        android.text.format.DateUtils.FORMAT_ABBREV_RELATIVE
+    ).toString()
 }
 
 @Composable
