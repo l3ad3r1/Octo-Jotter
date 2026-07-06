@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.CloudDone
@@ -81,6 +82,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -1852,6 +1854,8 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
 
     val repositories by viewModel.repositories.collectAsState()
     val selectedRepository by viewModel.selectedRepository.collectAsState()
+    val availableRepos by viewModel.availableRepos.collectAsState()
+    val isLoadingRepos by viewModel.isLoadingRepos.collectAsState()
 
     var inputToken by remember { mutableStateOf("") }
     var tokenVisible by remember { mutableStateOf(false) }
@@ -2143,6 +2147,65 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                             modifier = Modifier.testTag("repo_add_button")
                         ) {
                             Icon(Icons.Default.Add, contentDescription = "Add repository")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    // Discover repositories from the connected account so the user
+                    // can tap to add instead of typing owner/repo by hand.
+                    OutlinedButton(
+                        onClick = { viewModel.fetchAvailableRepos() },
+                        enabled = token.isNotEmpty() && !isLoadingRepos,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("load_repos_button")
+                    ) {
+                        if (isLoadingRepos) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Loading...")
+                        } else {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Find my GitHub repositories")
+                        }
+                    }
+
+                    // Discovered repos not already in the sync list — tap to add.
+                    val undiscovered = availableRepos.filter { it !in repositories }
+                    if (undiscovered.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Tap to add:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        undiscovered.forEach { repo ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.addRepository(repo) }
+                                    .padding(vertical = 6.dp)
+                                    .testTag("discovered_repo_$repo"),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Add $repo",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = repo,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

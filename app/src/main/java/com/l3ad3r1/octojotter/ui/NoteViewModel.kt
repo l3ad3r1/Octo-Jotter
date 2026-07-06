@@ -116,6 +116,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repoPreferences.setSelectedRepository(repo) }
     }
 
+    // Discovered repositories from the GitHub account (for tap-to-add in Settings).
+    private val _availableRepos = MutableStateFlow<List<String>>(emptyList())
+    val availableRepos: StateFlow<List<String>> = _availableRepos.asStateFlow()
+    private val _isLoadingRepos = MutableStateFlow(false)
+    val isLoadingRepos: StateFlow<Boolean> = _isLoadingRepos.asStateFlow()
+
+    fun fetchAvailableRepos() {
+        viewModelScope.launch {
+            _isLoadingRepos.value = true
+            val result = repository.listAccessibleRepositories()
+            _isLoadingRepos.value = false
+            result
+                .onSuccess { repos ->
+                    _availableRepos.value = repos
+                    if (repos.isEmpty()) _syncMessage.value = "No repositories found for this account."
+                }
+                .onFailure { _syncMessage.value = it.message }
+        }
+    }
+
     // DB Backup export preferences/status
     private val _exportStatus = MutableStateFlow<String?>(null)
     val exportStatus: StateFlow<String?> = _exportStatus.asStateFlow()

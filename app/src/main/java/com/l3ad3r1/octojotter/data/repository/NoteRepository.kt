@@ -149,6 +149,24 @@ class NoteRepository(
                 .replace("%2F", "/")
         }
 
+    /** List "owner/repo" for every repository the token can access (owner-affiliated). */
+    suspend fun listAccessibleRepositories(): Result<List<String>> {
+        val token = tokenManager.getToken()
+            ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
+        val formattedToken = "Bearer $token"
+        return try {
+            val response = githubApiService.getUserRepos(formattedToken)
+            if (!response.isSuccessful) {
+                val hint = if (response.code() == 403) "token needs `repo` scope" else response.message()
+                return Result.failure(IOException("Couldn't list repositories (${response.code()}): $hint"))
+            }
+            val names = response.body().orEmpty().map { it.fullName }.sorted()
+            Result.success(names)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Pull every Markdown file from [repoPath] into the local DB. Notes are
      * matched by (repository, path); locally-dirty notes (needsSync) are left

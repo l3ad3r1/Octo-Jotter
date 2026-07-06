@@ -101,6 +101,16 @@ interface GithubApiService {
         @Path("repo") repo: String
     ): Response<ReleaseResponse>
 
+    // List repositories the authenticated user owns (includes private repos
+    // when the token has the `repo` scope). Used for repo discovery in Settings.
+    @GET("user/repos")
+    suspend fun getUserRepos(
+        @Header("Authorization") token: String,
+        @Query("per_page") perPage: Int = 100,
+        @Query("affiliation") affiliation: String = "owner",
+        @Query("sort") sort: String = "full_name"
+    ): Response<List<RepoSummary>>
+
     // --- Repository (Contents / Git Data) API for two-way repo sync ---
 
     // Recursive git tree for a branch; lists every blob (file) in the repo.
@@ -144,6 +154,13 @@ interface GithubApiService {
 }
 
 // --- Repository API models ---
+
+@JsonClass(generateAdapter = true)
+data class RepoSummary(
+    @Json(name = "full_name") val fullName: String,
+    @Json(name = "private") val private: Boolean?,
+    @Json(name = "default_branch") val defaultBranch: String?
+)
 
 @JsonClass(generateAdapter = true)
 data class GitTreeResponse(
