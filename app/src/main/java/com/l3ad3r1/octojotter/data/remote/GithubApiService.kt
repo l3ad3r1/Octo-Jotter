@@ -7,8 +7,10 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -98,4 +100,105 @@ interface GithubApiService {
         @Path("owner") owner: String,
         @Path("repo") repo: String
     ): Response<ReleaseResponse>
+
+    // --- Repository (Contents / Git Data) API for two-way repo sync ---
+
+    // Recursive git tree for a branch; lists every blob (file) in the repo.
+    @GET("repos/{owner}/{repo}/git/trees/{branch}")
+    suspend fun getGitTree(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("branch") branch: String,
+        @Query("recursive") recursive: Int = 1
+    ): Response<GitTreeResponse>
+
+    // Fetch a single blob by SHA (content is base64-encoded).
+    @GET("repos/{owner}/{repo}/git/blobs/{sha}")
+    suspend fun getGitBlob(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("sha") sha: String
+    ): Response<GitBlobResponse>
+
+    // Create or update a file. Omit `sha` to create; include it to update.
+    @PUT("repos/{owner}/{repo}/contents/{path}")
+    suspend fun createOrUpdateFile(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path(value = "path", encoded = true) path: String,
+        @Body request: PutContentRequest
+    ): Response<PutContentResponse>
+
+    // Delete a file (DELETE with a body carrying the message + sha).
+    @HTTP(method = "DELETE", path = "repos/{owner}/{repo}/contents/{path}", hasBody = true)
+    suspend fun deleteRepoFile(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path(value = "path", encoded = true) path: String,
+        @Body request: DeleteContentRequest
+    ): Response<Unit>
 }
+
+// --- Repository API models ---
+
+@JsonClass(generateAdapter = true)
+data class GitTreeResponse(
+    @Json(name = "sha") val sha: String?,
+    @Json(name = "tree") val tree: List<GitTreeEntry>?,
+    @Json(name = "truncated") val truncated: Boolean?
+)
+
+@JsonClass(generateAdapter = true)
+data class GitTreeEntry(
+    @Json(name = "path") val path: String,
+    @Json(name = "mode") val mode: String?,
+    @Json(name = "type") val type: String,   // "blob" or "tree"
+    @Json(name = "sha") val sha: String,
+    @Json(name = "size") val size: Int?
+)
+
+@JsonClass(generateAdapter = true)
+data class GitBlobResponse(
+    @Json(name = "sha") val sha: String?,
+    @Json(name = "size") val size: Int?,
+    @Json(name = "content") val content: String?,   // base64
+    @Json(name = "encoding") val encoding: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class PutContentRequest(
+    @Json(name = "message") val message: String,
+    @Json(name = "content") val content: String,     // base64
+    @Json(name = "sha") val sha: String? = null,
+    @Json(name = "branch") val branch: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class PutContentResponse(
+    @Json(name = "content") val content: ContentInfo?,
+    @Json(name = "commit") val commit: CommitInfo?
+)
+
+@JsonClass(generateAdapter = true)
+data class ContentInfo(
+    @Json(name = "name") val name: String?,
+    @Json(name = "path") val path: String?,
+    @Json(name = "sha") val sha: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class CommitInfo(
+    @Json(name = "sha") val sha: String?,
+    @Json(name = "message") val message: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteContentRequest(
+    @Json(name = "message") val message: String,
+    @Json(name = "sha") val sha: String,
+    @Json(name = "branch") val branch: String? = null
+)

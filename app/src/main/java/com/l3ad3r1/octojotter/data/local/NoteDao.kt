@@ -20,8 +20,17 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id")
     fun getNoteByIdFlow(id: Int): Flow<NoteEntity?>
 
-    @Query("SELECT * FROM notes WHERE needsSync = 1")
+    // Gist-only dirty notes (repository IS NULL) so repo notes are never
+    // accidentally pushed as new Gists by the Gist sync path.
+    @Query("SELECT * FROM notes WHERE needsSync = 1 AND repository IS NULL")
     suspend fun getNotesToSync(): List<NoteEntity>
+
+    // Dirty notes belonging to a specific repository.
+    @Query("SELECT * FROM notes WHERE needsSync = 1 AND repository = :repository")
+    suspend fun getNotesToSyncForRepository(repository: String): List<NoteEntity>
+
+    @Query("SELECT * FROM notes WHERE repository = :repository AND path = :path LIMIT 1")
+    suspend fun getNoteByRepoAndPath(repository: String, path: String): NoteEntity?
 
     @Query("SELECT * FROM notes WHERE title LIKE :query OR content LIKE :query ORDER BY pinned DESC, lastModifiedLocally DESC")
     fun searchNotesFlow(query: String): Flow<List<NoteEntity>>

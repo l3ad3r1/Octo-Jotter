@@ -13,7 +13,14 @@ data class NoteEntity(
     val needsSync: Boolean = false,
     val pinned: Boolean = false,
     val tags: List<String> = emptyList(),
-    val folder: String? = null
+    val folder: String? = null,
+    // --- Repository sync fields (v7) ---
+    // When set, this note originates from a GitHub repository ("owner/repo")
+    // rather than a Gist. `path` is the file path within that repo and `sha`
+    // is the blob SHA of the last-synced version (used for conflict-safe PUTs).
+    val repository: String? = null,
+    val path: String? = null,
+    val sha: String? = null
 ) {
     val folderPath: List<String>
         get() = if (title.contains("__")) {
