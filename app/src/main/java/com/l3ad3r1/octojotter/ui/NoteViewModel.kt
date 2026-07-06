@@ -48,6 +48,19 @@ enum class SyncState {
     Offline
 }
 
+sealed class UpdateStatus {
+    object Idle : UpdateStatus()
+    object Checking : UpdateStatus()
+    object UpToDate : UpdateStatus()
+    data class Available(
+        val latestVersion: String,
+        val releaseUrl: String,
+        val apkUrl: String?,
+        val notes: String
+    ) : UpdateStatus()
+    data class Error(val message: String) : UpdateStatus()
+}
+
 class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     private val noteDao = AppDatabase.getDatabase(application).noteDao()
@@ -122,6 +135,63 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 _exportStatus.value = "Failed to export database: ${e.message}"
             }
         }
+    }
+
+    // ---- In-app updater (GitHub Releases channel) ----
+    val currentVersionName: String = com.l3ad3r1.octojotter.BuildConfig.VERSION_NAME
+
+    private val _updateStatus = MutableStateFlow<UpdateStatus>(UpdateStatus.Idle)
+    val updateStatus: StateFlow<UpdateStatus> = _updateStatus.asStateFlow()
+
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            _updateStatus.value = UpdateStatus.Checking
+            try {
+                val resp = githubApiService.getLatestRelease("l3ad3r1", "Octo-Jotter")
+                if (!resp.isSuccessful) {
+                    _updateStatus.value = UpdateStatus.Error("Couldn't reach GitHub (HTTP ${resp.code()})")
+                    return@launch
+                }
+                val release = resp.body()
+                if (release == null) {
+                    _updateStatus.value = UpdateStatus.Error("No published release found.")
+                    return@launch
+                }
+                val latestTag = release.tagName?.removePrefix("v")?.trim().orEmpty()
+                if (latestTag.isEmpty()) {
+                    _updateStatus.value = UpdateStatus.Error("No published release found.")
+                    return@launch
+                }
+                if (isNewerVersion(latestTag, currentVersionName)) {
+                    val apk = release.assets
+                        ?.firstOrNull { it.name?.endsWith(".apk", ignoreCase = true) == true }
+                        ?.downloadUrl
+                    _updateStatus.value = UpdateStatus.Available(
+                        latestVersion = latestTag,
+                        releaseUrl = release.htmlUrl ?: "https://github.com/l3ad3r1/Octo-Jotter/releases/latest",
+                        apkUrl = apk,
+                        notes = release.body?.trim()?.take(400).orEmpty()
+                    )
+                } else {
+                    _updateStatus.value = UpdateStatus.UpToDate
+                }
+            } catch (e: Exception) {
+                _updateStatus.value = UpdateStatus.Error(e.message ?: "Update check failed.")
+            }
+        }
+    }
+
+    // Compare dotted numeric versions; true when [latest] is strictly greater than [current].
+    private fun isNewerVersion(latest: String, current: String): Boolean {
+        fun parts(v: String) = v.split(".", "-").map { it.toIntOrNull() ?: 0 }
+        val l = parts(latest)
+        val c = parts(current)
+        for (i in 0 until maxOf(l.size, c.size)) {
+            val a = l.getOrElse(i) { 0 }
+            val b = c.getOrElse(i) { 0 }
+            if (a != b) return a > b
+        }
+        return false
     }
 
     fun clearExportStatus() {

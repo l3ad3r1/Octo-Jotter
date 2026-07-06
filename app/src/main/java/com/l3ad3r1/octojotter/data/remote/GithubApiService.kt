@@ -43,6 +43,22 @@ data class GistFileRequest(
     @Json(name = "filename") val filename: String? = null
 )
 
+@JsonClass(generateAdapter = true)
+data class ReleaseAsset(
+    @Json(name = "name") val name: String?,
+    @Json(name = "content_type") val contentType: String?,
+    @Json(name = "browser_download_url") val downloadUrl: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class ReleaseResponse(
+    @Json(name = "tag_name") val tagName: String?,
+    @Json(name = "name") val name: String?,
+    @Json(name = "html_url") val htmlUrl: String?,
+    @Json(name = "body") val body: String?,
+    @Json(name = "assets") val assets: List<ReleaseAsset>?
+)
+
 interface GithubApiService {
     @GET("gists")
     suspend fun getGists(
@@ -74,4 +90,12 @@ interface GithubApiService {
         @Header("Authorization") token: String,
         @Path("gist_id") gistId: String
     ): Response<Unit>
+
+    // Latest published GitHub Release — used by the in-app updater. No auth
+    // needed for a public repo.
+    @GET("repos/{owner}/{repo}/releases/latest")
+    suspend fun getLatestRelease(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String
+    ): Response<ReleaseResponse>
 }

@@ -1840,7 +1840,9 @@ fun SaveStatusIndicator(saveStatus: SaveStatus) {
 @Composable
 fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val lastExportedPath by viewModel.lastExportedPath.collectAsState()
+    val updateStatus by viewModel.updateStatus.collectAsState()
     val token by viewModel.githubToken.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
@@ -2207,6 +2209,102 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                                         }
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- App updates (GitHub Releases) ----
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth().testTag("update_settings_card")
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Updates",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Current version ${viewModel.currentVersionName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    when (val status = updateStatus) {
+                        is UpdateStatus.Available -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDone,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.octoStatus.syncOk,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Version ${status.latestVersion} is available",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (status.notes.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = status.notes,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    maxLines = 6,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { uriHandler.openUri(status.apkUrl ?: status.releaseUrl) },
+                                modifier = Modifier.fillMaxWidth().testTag("download_update_button")
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (status.apkUrl != null) "Download v${status.latestVersion}" else "View release")
+                            }
+                        }
+                        else -> {
+                            Button(
+                                onClick = { viewModel.checkForUpdate() },
+                                enabled = status != UpdateStatus.Checking,
+                                modifier = Modifier.fillMaxWidth().testTag("check_update_button")
+                            ) {
+                                if (status == UpdateStatus.Checking) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Checking...")
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Check for updates")
+                                }
+                            }
+                            val statusLine = when (status) {
+                                UpdateStatus.UpToDate -> "You're on the latest version." to MaterialTheme.octoStatus.syncOk
+                                is UpdateStatus.Error -> status.message to MaterialTheme.colorScheme.error
+                                else -> null
+                            }
+                            statusLine?.let { (msg, tint) ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = msg,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = tint,
+                                    modifier = Modifier.testTag("update_status_text")
+                                )
                             }
                         }
                     }
