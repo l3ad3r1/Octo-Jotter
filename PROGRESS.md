@@ -92,6 +92,16 @@ then decide on optional background repo sync + version/release bump.
 - ⚠️ SIGNED WITH A NEW KEY (see below) — cannot update older installs in place;
   reinstall fresh after exporting notes.
 
+### v1.4 SHIPPED (2026-07-07) — discovery + tree + formatting + back-to-exit
+- versionCode 5 / versionName 1.4; signed with the SAME v1.3 key (updates in
+  place, no reinstall). Latest: https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.4
+- Repo discovery (getUserRepos → Settings "Find my GitHub repositories", tap-to-add).
+- Nested folder tree (buildFolderTree/flattenFolderTree; recursive expand/collapse
+  + counts) replaces flat full-path accordions in the Grouped view.
+- Editor: H2/H3/numbered/quote/link buttons; fixed insertMarkdown line-prefix
+  mirroring (trailing-space = line prefix, no suffix).
+- Home: double-back-to-exit with toast (first back closes drawer).
+
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
   REGENERATED a new upload key 2026-07-07: alias `upload`, store/key password
