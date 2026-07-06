@@ -15,12 +15,11 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
   (18.7 MB, v2-signed, applicationId com.l3ad3r1.octojotter, label "Octo Jotter").
 - Wrote README + pushed all commits to origin/main.
 
-## In progress
-- Awaiting user go-ahead to publish a GitHub Release (v1.0) with the APK
-  (blocked by permission classifier — not explicitly requested).
+- Published GitHub Release v1.0 with app-release.apk:
+  https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.0
 
-## Next steps
-1. (Optional) `gh release create v1.0 <apk> --repo l3ad3r1/Octo-Jotter` once approved.
+## Status: COMPLETE
+All requested work done — clone, rename, icon, splash, release APK, README, release.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
