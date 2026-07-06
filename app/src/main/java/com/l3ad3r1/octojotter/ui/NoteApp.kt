@@ -153,6 +153,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.Title
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.CheckBox
+import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import com.l3ad3r1.octojotter.data.local.NoteEntity
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
@@ -1356,22 +1362,27 @@ fun EditorScreen(
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 4.dp,
-                    modifier = Modifier.height(64.dp)
+                    // Lift the toolbar above the soft keyboard so formatting is
+                    // reachable exactly when the user is typing.
+                    modifier = Modifier
+                        .height(64.dp)
+                        .imePadding()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Format",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
+                        // Heading
+                        IconButton(
+                            onClick = { insertMarkdown("# ", "") },
+                            modifier = Modifier.testTag("format_heading_button")
+                        ) {
+                            Icon(Icons.Default.Title, contentDescription = "Heading")
+                        }
                         // Bold
                         IconButton(
                             onClick = { insertMarkdown("**") },
@@ -1393,12 +1404,33 @@ fun EditorScreen(
                         ) {
                             Icon(Icons.Default.FormatStrikethrough, contentDescription = "Format Strikethrough")
                         }
+                        // Inline code
+                        IconButton(
+                            onClick = { insertMarkdown("`") },
+                            modifier = Modifier.testTag("format_code_button")
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = "Inline Code")
+                        }
                         // Unordered List
                         IconButton(
                             onClick = { insertMarkdown("- ", "") },
                             modifier = Modifier.testTag("format_list_button")
                         ) {
                             Icon(Icons.Default.FormatListBulleted, contentDescription = "Format Unordered List")
+                        }
+                        // Task checkbox
+                        IconButton(
+                            onClick = { insertMarkdown("- [ ] ", "") },
+                            modifier = Modifier.testTag("format_checkbox_button")
+                        ) {
+                            Icon(Icons.Default.CheckBox, contentDescription = "Task checkbox")
+                        }
+                        // Wiki link
+                        IconButton(
+                            onClick = { insertMarkdown("[[", "]]") },
+                            modifier = Modifier.testTag("format_wikilink_button")
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = "Wiki link")
                         }
                     }
                 }
@@ -1602,15 +1634,19 @@ fun EditorInputs(
                 items(tags) { tag ->
                     InputChip(
                         selected = true,
-                        onClick = {
-                            onTagsChanged(tags - tag)
-                        },
+                        // Chip body is a no-op; only the trailing ✕ removes the tag,
+                        // so an accidental tap can't silently delete it.
+                        onClick = { },
                         label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
                         trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Remove $tag",
-                                modifier = Modifier.size(12.dp)
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .clickable { onTagsChanged(tags - tag) }
+                                    .testTag("remove_tag_${tag}")
                             )
                         },
                         modifier = Modifier.testTag("editor_tag_chip_$tag")
@@ -2272,6 +2308,28 @@ fun MarkdownPreview(
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                onWikiLinkClick = onWikiLinkClick,
+                                onHashtagClick = onHashtagClick
+                            )
+                        }
+                    }
+                    line.startsWith("- [ ] ") || line.startsWith("- [x] ") || line.startsWith("- [X] ") -> {
+                        val checked = !line.startsWith("- [ ] ")
+                        Row(
+                            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                                contentDescription = if (checked) "Completed" else "Incomplete",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AutolinkText(
+                                text = autoLinkUrls(parseInlineStyles(line.substring(6), status), MaterialTheme.colorScheme.primary),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 onWikiLinkClick = onWikiLinkClick,
                                 onHashtagClick = onHashtagClick
                             )
