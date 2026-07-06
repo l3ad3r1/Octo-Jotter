@@ -96,6 +96,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Repository sync preferences (list of "owner/repo" + selected one)
+    private val repoPreferences = com.l3ad3r1.octojotter.data.local.RepoPreferences(application)
+    val repositories: StateFlow<List<String>> = repoPreferences.repositories
+        .map { it.sorted() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val selectedRepository: StateFlow<String?> = repoPreferences.selectedRepository
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun addRepository(repo: String) {
+        viewModelScope.launch { repoPreferences.addRepository(repo) }
+    }
+
+    fun deleteRepository(repo: String) {
+        viewModelScope.launch { repoPreferences.deleteRepository(repo) }
+    }
+
+    fun selectRepository(repo: String?) {
+        viewModelScope.launch { repoPreferences.setSelectedRepository(repo) }
+    }
+
     // DB Backup export preferences/status
     private val _exportStatus = MutableStateFlow<String?>(null)
     val exportStatus: StateFlow<String?> = _exportStatus.asStateFlow()
@@ -603,6 +623,36 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 _syncMessage.value = "Sync successful!"
             } else {
                 _syncMessage.value = "Pull failed: ${pullResult.exceptionOrNull()?.message}"
+            }
+        }
+    }
+
+    // Manual two-way sync for the selected GitHub repository. Kept separate
+    // from the Gist sync and from background auto-sync, so notes in real
+    // knowledge-base repos are only pushed when the user explicitly asks.
+    fun syncRepositoryNow() {
+        val repoPath = selectedRepository.value
+        if (repoPath.isNullOrBlank()) {
+            _syncMessage.value = "No repository selected."
+            return
+        }
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncMessage.value = "Syncing $repoPath..."
+
+            val pushResult = repository.pushToRepository(repoPath)
+            if (pushResult.isFailure) {
+                _isSyncing.value = false
+                _syncMessage.value = "Repo push failed: ${pushResult.exceptionOrNull()?.message}"
+                return@launch
+            }
+
+            val pullResult = repository.pullFromRepository(repoPath)
+            _isSyncing.value = false
+            _syncMessage.value = if (pullResult.isSuccess) {
+                "Synced $repoPath"
+            } else {
+                "Repo pull failed: ${pullResult.exceptionOrNull()?.message}"
             }
         }
     }
