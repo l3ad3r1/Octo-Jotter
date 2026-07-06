@@ -127,9 +127,18 @@ Engine choice: **Mozilla Rhino** (org.mozilla:rhino:1.7.14), pure-JVM/interprete
   runPluginCommand. Editor toolbar has a plugin-commands dropdown (runs on note text).
 - Sample: Text Tools (UPPERCASE/lowercase/Title Case/Slugify/word count).
 - VERIFIED the JS in real Rhino via shell (all commands correct). assembleDebug green.
-NEXT: enforce minAppVersion on install; per-plugin permission prompts; more API
-(toolbar buttons, md post-processors, note read/write, settings); scriptUrl fetch;
-plugin updates; richer declarative types (snippets/templates).
+### Community plugins PHASE 3 built (2026-07-07)
+- minAppVersion ENFORCED on install (PluginRepository.install(entry, appVersion)
+  + meetsMinVersion; blocks with a "please update" message).
+- Permission consent dialog before installing plugins that declare permissions
+  (RegistryEntry.permissions). NOTE: samples declare none, so it's groundwork —
+  fires for any future permission-declaring plugin; no API enforces perms yet.
+- New declarative **snippet** plugin type: manifest snippets[] (id/name/content)
+  inserted at the cursor via the editor plugin dropdown (commands+snippets unified,
+  Bolt vs Bookmark icons). Sample: Markdown Snippets (callout/table/code/tasks/frontmatter).
+- Registry now exercises all 4 types: theme, script, snippet.
+NEXT: API-level permission enforcement + sensitive APIs (note read/write, clipboard,
+network); md post-processors / custom toolbar buttons; scriptUrl fetch; plugin updates.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
