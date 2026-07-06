@@ -9,7 +9,10 @@ import com.l3ad3r1.octojotter.data.local.NoteWithTags
 import com.l3ad3r1.octojotter.data.remote.GithubApiService
 import com.l3ad3r1.octojotter.data.remote.GistFileRequest
 import com.l3ad3r1.octojotter.data.remote.GistRequest
+import com.l3ad3r1.octojotter.data.remote.PutContentRequest
+import com.l3ad3r1.octojotter.data.remote.DeleteContentRequest
 import com.l3ad3r1.octojotter.data.remote.TokenManager
+import android.util.Base64
 import kotlinx.coroutines.flow.Flow
 import java.io.IOException
 
@@ -93,6 +96,10 @@ class NoteRepository(
 
     suspend fun deleteNoteAndGist(note: NoteEntity): Result<Unit> {
         noteDao.delete(note)
+        // Repo-backed note: remove the file from its repository instead of a Gist.
+        if (!note.repository.isNullOrEmpty()) {
+            return deleteNoteFromRepository(note)
+        }
         val gistId = note.gistId
         if (!gistId.isNullOrEmpty()) {
             val token = tokenManager.getToken()
@@ -115,6 +122,174 @@ class NoteRepository(
 
     suspend fun deleteNoteById(id: Int) {
         noteDao.deleteById(id)
+    }
+
+    // ---------------------------------------------------------------------
+    // Repository (folder-based) two-way sync — GitHub Contents/Git Data API
+    // ---------------------------------------------------------------------
+
+    // Split "owner/repo" into a validated pair, or fail with a friendly message.
+    private fun parseRepoPath(repoPath: String): Result<Pair<String, String>> {
+        val parts = repoPath.trim().trim('/').split("/")
+        val owner = parts.getOrNull(0)?.takeIf { it.isNotBlank() }
+        val repo = parts.getOrNull(1)?.takeIf { it.isNotBlank() }
+        return if (owner != null && repo != null && parts.size == 2) {
+            Result.success(owner to repo)
+        } else {
+            Result.failure(Exception("Invalid repository. Use the format owner/repo."))
+        }
+    }
+
+    // Percent-encode each path segment while preserving "/" separators, so
+    // paths with spaces or unicode (e.g. "01 - Projects/Idea — draft.md") work.
+    private fun encodeRepoPath(path: String): String =
+        path.split("/").joinToString("/") { segment ->
+            java.net.URLEncoder.encode(segment, "UTF-8")
+                .replace("+", "%20")
+                .replace("%2F", "/")
+        }
+
+    /**
+     * Pull every Markdown file from [repoPath] into the local DB. Notes are
+     * matched by (repository, path); locally-dirty notes (needsSync) are left
+     * untouched so unsynced edits are never clobbered by a pull.
+     */
+    suspend fun pullFromRepository(repoPath: String): Result<Unit> {
+        val token = tokenManager.getToken()
+            ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
+        val formattedToken = "Bearer $token"
+        val (owner, repo) = parseRepoPath(repoPath).getOrElse { return Result.failure(it) }
+
+        return try {
+            // Default branch varies (main vs master); try main, then master.
+            var response = githubApiService.getGitTree(formattedToken, owner, repo, "main")
+            if (!response.isSuccessful) {
+                response = githubApiService.getGitTree(formattedToken, owner, repo, "master")
+            }
+            if (!response.isSuccessful) {
+                val code = response.code()
+                val hint = when (code) {
+                    401 -> "Unauthorized — check your token."
+                    403 -> "Forbidden — the token needs `repo` scope for private repos."
+                    404 -> "Repository or branch not found."
+                    else -> response.message()
+                }
+                return Result.failure(IOException("Failed to fetch repository tree ($code): $hint"))
+            }
+
+            val entries = response.body()?.tree ?: emptyList()
+            val mdEntries = entries.filter { it.type == "blob" && it.path.endsWith(".md", ignoreCase = true) }
+
+            for (entry in mdEntries) {
+                val blobResponse = githubApiService.getGitBlob(formattedToken, owner, repo, entry.sha)
+                if (!blobResponse.isSuccessful) continue
+                val encoded = blobResponse.body()?.content ?: continue
+                val decoded = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+                // Title mirrors the app's PARA folder convention (path "/" -> "__").
+                val title = entry.path.removeSuffix(".md").replace("/", "__")
+
+                val existing = noteDao.getNoteByRepoAndPath(repoPath, entry.path)
+                if (existing == null) {
+                    noteDao.insert(
+                        NoteEntity(
+                            title = title,
+                            content = decoded,
+                            repository = repoPath,
+                            path = entry.path,
+                            sha = entry.sha,
+                            needsSync = false,
+                            lastModifiedLocally = System.currentTimeMillis()
+                        )
+                    )
+                } else if (!existing.needsSync) {
+                    noteDao.update(
+                        existing.copy(
+                            title = title,
+                            content = decoded,
+                            sha = entry.sha,
+                            needsSync = false,
+                            lastModifiedLocally = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Push all locally-dirty notes belonging to [repoPath] back to the repo,
+     * creating or updating each file (conflict-safe via the stored blob sha).
+     */
+    suspend fun pushToRepository(repoPath: String): Result<Unit> {
+        val token = tokenManager.getToken()
+            ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
+        val formattedToken = "Bearer $token"
+        val (owner, repo) = parseRepoPath(repoPath).getOrElse { return Result.failure(it) }
+
+        return try {
+            val notesToSync = noteDao.getNotesToSyncForRepository(repoPath)
+            for (note in notesToSync) {
+                // Derive a file path from the title's PARA convention if unset.
+                val rawPath = note.path ?: (note.title.replace("__", "/").ifBlank { "Untitled" } + ".md")
+                val encodedPath = encodeRepoPath(rawPath)
+                val base64Content = Base64.encodeToString(note.content.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+
+                suspend fun put(sha: String?) = githubApiService.createOrUpdateFile(
+                    formattedToken, owner, repo, encodedPath,
+                    PutContentRequest(
+                        message = "Update ${note.title} via Octo-Jotter",
+                        content = base64Content,
+                        sha = sha
+                    )
+                )
+
+                var response = put(note.sha)
+                // 409/422 = stale sha; retry as a fresh create/update without sha.
+                if (response.code() == 409 || response.code() == 422) {
+                    response = put(null)
+                }
+
+                if (response.isSuccessful) {
+                    val newSha = response.body()?.content?.sha
+                    noteDao.update(note.copy(path = rawPath, sha = newSha, needsSync = false))
+                } else {
+                    return Result.failure(IOException("Failed to upload ${note.title} (${response.code()})"))
+                }
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** Delete a repo-backed note's file from GitHub (best-effort). */
+    suspend fun deleteNoteFromRepository(note: NoteEntity): Result<Unit> {
+        val repoPath = note.repository
+        val path = note.path
+        val sha = note.sha
+        if (repoPath.isNullOrEmpty() || path.isNullOrEmpty() || sha.isNullOrEmpty()) {
+            return Result.success(Unit)  // never synced remotely; nothing to delete
+        }
+        val token = tokenManager.getToken() ?: return Result.success(Unit)
+        val formattedToken = "Bearer $token"
+        val (owner, repo) = parseRepoPath(repoPath).getOrElse { return Result.success(Unit) }
+
+        return try {
+            val response = githubApiService.deleteRepoFile(
+                formattedToken, owner, repo, encodeRepoPath(path),
+                DeleteContentRequest(message = "Delete ${note.title} via Octo-Jotter", sha = sha)
+            )
+            if (response.isSuccessful || response.code() == 404) {
+                Result.success(Unit)
+            } else {
+                Result.failure(IOException("Failed to delete file from repo (${response.code()})"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun pullFromGithub(): Result<Unit> {
