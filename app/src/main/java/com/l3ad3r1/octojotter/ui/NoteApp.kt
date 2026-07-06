@@ -85,6 +85,10 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -252,9 +256,28 @@ fun NotesListScreen(
 
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val snackbarHostState = remember { SnackbarHostState() }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
     var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
+
+    // Swipe-to-delete with a non-destructive Undo window: the note is hidden
+    // immediately and only permanently deleted if the Snackbar times out.
+    val requestDelete: (NoteEntity) -> Unit = { note ->
+        viewModel.markPendingDeletion(note.id)
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Note deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoPendingDeletion(note.id)
+            } else {
+                viewModel.commitPendingDeletion(note)
+            }
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -330,13 +353,13 @@ fun NotesListScreen(
                                     Text(folder, modifier = Modifier.weight(1f))
                                     IconButton(
                                         onClick = { viewModel.deleteFolder(folder) },
-                                        modifier = Modifier.size(24.dp).testTag("delete_folder_$folder")
+                                        modifier = Modifier.testTag("delete_folder_$folder")
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
                                             contentDescription = "Delete Folder",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.error
                                         )
                                     }
                                 }
@@ -354,6 +377,7 @@ fun NotesListScreen(
         }
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = { Text(selectedFolder ?: "Octo Jotter", fontWeight = FontWeight.Bold) },
@@ -664,7 +688,7 @@ fun NotesListScreen(
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { dismissValue ->
                                 if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                    viewModel.deleteNote(note)
+                                    requestDelete(note)
                                     true
                                 } else {
                                     false
@@ -733,7 +757,6 @@ fun NotesListScreen(
                                         IconButton(
                                             onClick = { viewModel.togglePinNote(note) },
                                             modifier = Modifier
-                                                .size(24.dp)
                                                 .testTag("pin_button_${note.id}")
                                         ) {
                                             Icon(
@@ -819,17 +842,6 @@ fun NotesListScreen(
                                                     )
                                                 }
                                             }
-                                        }
-                                        IconButton(
-                                            onClick = { noteToDelete = note },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Delete Note",
-                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                                modifier = Modifier.size(18.dp)
-                                            )
                                         }
                                     }
                                 }
@@ -1602,14 +1614,13 @@ fun EditorInputs(
                     IconButton(
                         onClick = { showAddTagDialog = true },
                         modifier = Modifier
-                            .size(28.dp)
                             .testTag("add_tag_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Add Tag",
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

@@ -179,14 +179,36 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Filter notes by folder
-    val filteredNotes: StateFlow<List<NoteEntity>> = combine(notesWithTagFiltering, _selectedFolder) { notes, selectedFolder ->
-        when (selectedFolder) {
-            null -> notes
-            "Uncategorized" -> notes.filter { it.folderPath.isEmpty() }
-            else -> notes.filter { it.folderPath.contains(selectedFolder) }
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Notes hidden from the list while a "deleted — Undo" Snackbar is showing.
+    // The actual delete is only committed once the Snackbar is dismissed without Undo.
+    private val _pendingDeletionIds = MutableStateFlow<Set<Int>>(emptySet())
+
+    // Filter notes by folder, excluding any pending (optimistically deleted) notes.
+    val filteredNotes: StateFlow<List<NoteEntity>> =
+        combine(notesWithTagFiltering, _selectedFolder, _pendingDeletionIds) { notes, selectedFolder, pending ->
+            val visible = if (pending.isEmpty()) notes else notes.filter { it.id !in pending }
+            when (selectedFolder) {
+                null -> visible
+                "Uncategorized" -> visible.filter { it.folderPath.isEmpty() }
+                else -> visible.filter { it.folderPath.contains(selectedFolder) }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Hide a note optimistically (swipe-to-delete) before the Undo window elapses.
+    fun markPendingDeletion(noteId: Int) {
+        _pendingDeletionIds.value = _pendingDeletionIds.value + noteId
+    }
+
+    // Restore an optimistically hidden note when the user taps Undo.
+    fun undoPendingDeletion(noteId: Int) {
+        _pendingDeletionIds.value = _pendingDeletionIds.value - noteId
+    }
+
+    // Commit a pending swipe-delete once the Undo window has elapsed.
+    fun commitPendingDeletion(note: NoteEntity) {
+        deleteNote(note)
+        _pendingDeletionIds.value = _pendingDeletionIds.value - note.id
+    }
 
     // Database-backed tags
     val dbTags: StateFlow<List<String>> = repository.allTagsFlow.map { tags ->
