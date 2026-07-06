@@ -42,11 +42,22 @@ v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
 - DONE Phase 6: DB export share sheet via FileProvider + ACTION_SEND. (md export)
 - DONE Phase 7: scrollable sort/view row (no overflow) + "/" folder separator. (md/low)
 
-### Remaining review items (minor polish, not yet done)
-- Note-card density (icon-only sync badge, cap tags to 2-3) — partially done.
-- Folder tree cards-in-cards visual nesting (Low).
-- Editor: show note title in app bar instead of static "Editor" (Low).
-- Then: rebuild + publish updated APK (v1.1).
+- DONE Phase 8 (final polish): editor app bar shows note title; icon-only sync
+  badge; tags capped at 3; folder groups are flat sections (no cards-in-cards).
+- DONE in-app updater: Settings > Updates card checks GitHub Releases latest,
+  compares to BuildConfig.VERSION_NAME, offers APK download. (GithubApiService
+  getLatestRelease + NoteViewModel.checkForUpdate + UpdateStatus)
+
+### Sync diagnosis (user report: can't pull Dronehire/Cane-Theory second-brain)
+- ROOT CAUSE: those are private REPOSITORIES, not Gists. The app only uses the
+  /gists API (no repo support), and the pull filter only imports gists containing
+  a .md file. The account's only gists are hermes-backup.json (no .md) -> nothing imports.
+- To pull repos we'd need a NEW feature: GitHub Contents/Trees API + repo-picker UI
+  + folder mapping + PAT `repo` scope. Awaiting owner decision on scope.
+
+### When publishing v1.1
+- Bump versionCode 1->2 and versionName "1.0"->"1.1" in app/build.gradle.kts so the
+  updater and installers see the new version.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
