@@ -1,0 +1,6 @@
+{
+  "name": "Octojot",
+  "description": "An offline-first Markdown notes app syncing with GitHub Gists",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
