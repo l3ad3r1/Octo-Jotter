@@ -678,7 +678,7 @@ fun NotesListScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Create a markdown note or sync with your GitHub Gists to get started.",
+                                text = "Jot your first markdown note, or connect GitHub to import your Gists.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -686,12 +686,21 @@ fun NotesListScreen(
                             )
                             Spacer(modifier = Modifier.height(24.dp))
                             Button(
+                                onClick = {
+                                    viewModel.createNewNote { newId -> onNavigateToEditor(newId) }
+                                },
+                                modifier = Modifier.testTag("create_first_note_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Create your first note")
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(
                                 onClick = onNavigateToSettings,
                                 modifier = Modifier.testTag("go_to_settings_button")
                             ) {
-                                Icon(Icons.Default.Settings, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Configure GitHub PAT")
+                                Text("Connect GitHub")
                             }
                         }
                     }
@@ -1350,9 +1359,9 @@ fun EditorScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
         },
@@ -1900,16 +1909,40 @@ fun SettingsScreen(viewModel: NoteViewModel) {
 
     var inputToken by remember { mutableStateOf("") }
     var tokenVisible by remember { mutableStateOf(false) }
+    var showClearTokenConfirm by remember { mutableStateOf(false) }
 
     // Synchronize local input field with stored token on first load
     LaunchedEffect(token) {
         inputToken = token
     }
 
+    if (showClearTokenConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearTokenConfirm = false },
+            title = { Text("Disconnect GitHub?") },
+            text = { Text("This removes your saved access token from this device. Your notes stay here — only cloud sync stops until you reconnect.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearToken()
+                        inputToken = ""
+                        showClearTokenConfirm = false
+                    },
+                    modifier = Modifier.testTag("confirm_clear_token_button")
+                ) {
+                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearTokenConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("GitHub Synchronization", fontWeight = FontWeight.Bold) },
+                title = { Text("Settings", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1969,37 +2002,25 @@ fun SettingsScreen(viewModel: NoteViewModel) {
                     .testTag("github_token_input")
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // Primary action is full-width; the destructive "Disconnect" is
+            // demoted to a text button and guarded by a confirmation dialog.
+            Button(
+                onClick = { viewModel.saveToken(inputToken.trim()) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("save_token_button")
             ) {
-                Button(
-                    onClick = {
-                        viewModel.saveToken(inputToken.trim())
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("save_token_button")
-                ) {
-                    Text("Save Securely")
-                }
+                Text("Save Securely")
+            }
 
-                Button(
-                    onClick = {
-                        viewModel.clearToken()
-                        inputToken = ""
-                    },
-                    colors = MaterialTheme.colorScheme.errorContainer.let {
-                        androidx.compose.material3.ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    },
+            if (token.isNotEmpty()) {
+                TextButton(
+                    onClick = { showClearTokenConfirm = true },
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .testTag("clear_token_button")
                 ) {
-                    Text("Clear Token")
+                    Text("Disconnect GitHub", color = MaterialTheme.colorScheme.error)
                 }
             }
 
@@ -2071,7 +2092,7 @@ fun SettingsScreen(viewModel: NoteViewModel) {
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { viewModel.clearSyncMessage() }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
                             }
                         }
                     }
