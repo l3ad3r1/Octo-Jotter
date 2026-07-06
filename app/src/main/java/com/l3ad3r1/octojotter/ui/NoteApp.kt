@@ -171,78 +171,43 @@ import java.util.Locale
 @Composable
 fun NoteApp(viewModel: NoteViewModel) {
     val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        bottomBar = {
-            if (currentRoute == "notes_list" || currentRoute == "settings") {
-                NavigationBar(
-                    modifier = Modifier.testTag("bottom_nav_bar")
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Notes, contentDescription = "Notes List") },
-                        label = { Text("Notes") },
-                        selected = currentRoute == "notes_list",
-                        onClick = {
-                            if (currentRoute != "notes_list") {
-                                navController.navigate("notes_list") {
-                                    popUpTo("notes_list") { inclusive = true }
-                                }
-                            }
-                        },
-                        modifier = Modifier.testTag("nav_notes_tab")
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") },
-                        selected = currentRoute == "settings",
-                        onClick = {
-                            if (currentRoute != "settings") {
-                                navController.navigate("settings") {
-                                    launchSingleTop = true
-                                }
-                            }
-                        },
-                        modifier = Modifier.testTag("nav_settings_tab")
-                    )
+    // Settings is a pushed screen reached from the top-bar gear, not a bottom-nav
+    // destination — a 2-item bottom bar wasn't worth the permanent vertical cost.
+    NavHost(
+        navController = navController,
+        startDestination = "notes_list",
+        modifier = Modifier.fillMaxSize()
+    ) {
+        composable("notes_list") {
+            NotesListScreen(
+                viewModel = viewModel,
+                onNavigateToEditor = { noteId ->
+                    navController.navigate("editor/$noteId")
+                },
+                onNavigateToSettings = {
+                    navController.navigate("settings") { launchSingleTop = true }
                 }
-            }
+            )
         }
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = "notes_list",
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable("notes_list") {
-                NotesListScreen(
-                    viewModel = viewModel,
-                    onNavigateToEditor = { noteId ->
-                        navController.navigate("editor/$noteId")
-                    },
-                    onNavigateToSettings = {
-                        navController.navigate("settings")
-                    }
-                )
-            }
-            composable("editor/{noteId}") { backStackEntry ->
-                val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: -1
-                EditorScreen(
-                    noteId = noteId,
-                    viewModel = viewModel,
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    },
-                    onNavigateToEditor = { newNoteId ->
-                        navController.navigate("editor/$newNoteId")
-                    }
-                )
-            }
-            composable("settings") {
-                SettingsScreen(viewModel = viewModel)
-            }
+        composable("editor/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: -1
+            EditorScreen(
+                noteId = noteId,
+                viewModel = viewModel,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToEditor = { newNoteId ->
+                    navController.navigate("editor/$newNoteId")
+                }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }
@@ -1826,6 +1791,8 @@ fun EditorInputs(
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
         Spacer(modifier = Modifier.height(8.dp))
+        val isDark = isSystemInDarkTheme()
+        val markdownTransformation = remember(isDark) { MarkdownVisualTransformation(isDark) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             TextField(
                 value = textFieldValue,
@@ -1837,7 +1804,7 @@ fun EditorInputs(
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent
                 ),
-                visualTransformation = MarkdownVisualTransformation(isSystemInDarkTheme()),
+                visualTransformation = markdownTransformation,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("note_content_input")
@@ -1900,7 +1867,7 @@ fun SaveStatusIndicator(saveStatus: SaveStatus) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(viewModel: NoteViewModel) {
+fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
     val token by viewModel.githubToken.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
@@ -1943,9 +1910,15 @@ fun SettingsScreen(viewModel: NoteViewModel) {
         topBar = {
             TopAppBar(
                 title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("settings_back_button")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
         }
@@ -2672,8 +2645,20 @@ fun SyncStatusIndicator(syncState: SyncState) {
 }
 
 class MarkdownVisualTransformation(private val isDarkTheme: Boolean) : VisualTransformation {
+    // Cache the last highlight so cursor moves / recompositions that don't change
+    // the text skip the regex passes (filter() is called on every keystroke).
+    private var cachedInput: String? = null
+    private var cachedOutput: AnnotatedString? = null
+
     override fun filter(text: AnnotatedString): TransformedText {
-        val highlighted = highlightMarkdown(text.text, isDarkTheme)
+        val highlighted = if (text.text == cachedInput) {
+            cachedOutput!!
+        } else {
+            highlightMarkdown(text.text, isDarkTheme).also {
+                cachedInput = text.text
+                cachedOutput = it
+            }
+        }
         return TransformedText(highlighted, OffsetMapping.Identity)
     }
 }
@@ -2731,8 +2716,8 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
             )
         }
 
-        // 3. Italic (*text*)
-        val italicRegex = """\*.*?\*""".toRegex()
+        // 3. Italic (*text*) — single asterisks only, so it doesn't match inside **bold**
+        val italicRegex = """(?<!\*)\*(?!\*)([^*\n]+)\*(?!\*)""".toRegex()
         italicRegex.findAll(text).forEach { match ->
             addStyle(
                 style = SpanStyle(fontStyle = FontStyle.Italic),
