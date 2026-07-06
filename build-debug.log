@@ -1,0 +1,92 @@
+Starting a Gradle Daemon, 1 busy Daemon could not be reused, use --status for details
+Calculating task graph as no cached configuration is available for tasks: :app:assembleDebug
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+
+> Task :app:processDebugGoogleServices
+File google-services.json is missing.
+The Google Services Plugin cannot function without it.
+Searched locations: E:\claude-projects\Octo-Jotter\app\src\debug\google-services.json, E:\claude-projects\Octo-Jotter\app\src\debug\google-services.json, E:\claude-projects\Octo-Jotter\app\src\google-services.json, E:\claude-projects\Octo-Jotter\app\src\debug\google-services.json, E:\claude-projects\Octo-Jotter\app\src\Debug\google-services.json, E:\claude-projects\Octo-Jotter\app\google-services.json
+
+> Task :app:generateDebugResources
+> Task :app:generateDebugBuildConfig
+> Task :app:javaPreCompileDebug
+> Task :app:packageDebugResources
+> Task :app:checkDebugDuplicateClasses
+> Task :app:desugarDebugFileDependencies
+> Task :app:processDebugNavigationResources
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:mergeLibDexDebug
+> Task :app:parseDebugLocalResources
+> Task :app:generateDebugRFile
+> Task :app:mapDebugSourceSetPaths
+> Task :app:compileDebugNavigationResources
+> Task :app:checkDebugAarMetadata
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:processDebugMainManifest
+> Task :app:processDebugManifest
+> Task :app:processDebugManifestForPackage
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugResources
+> Task :app:mergeDebugNativeLibs
+> Task :app:stripDebugDebugSymbols
+> Task :app:validateSigningDebug FAILED
+> Task :app:processDebugResources FAILED
+
+> Task :app:kspDebugKotlin
+w: [ksp] E:/claude-projects/Octo-Jotter/app/src/main/java/com/l3ad3r1/octojotter/data/local/TagEntity.kt:20: The column tagName in the junction entity com.l3ad3r1.octojotter.`data`.local.NoteTagCrossRef is being used to resolve a relationship but it is not covered by any index. This might cause a full table scan when resolving the relationship, it is highly advised to create an index that covers this column.
+
+> Task :app:mergeExtDexDebug
+
+[Incubating] Problems report is available at: file:///E:/claude-projects/Octo-Jotter/build/reports/problems/problems-report.html
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app:validateSigningDebug' (registered by plugin 'com.android.internal.application').
+> Keystore file 'E:\claude-projects\Octo-Jotter\debug.keystore' not found for signing config 'debugConfig'.
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app:processDebugResources' (registered by plugin 'com.android.internal.application').
+> A failure occurred while executing com.android.build.gradle.internal.res.LinkApplicationAndroidResourcesTask$TaskAction
+   > Android resource linking failed
+     com.l3ad3r1.octojotter.app-mergeDebugResources-73:/values/values.xml:269: error: resource drawable/splash_icon (aka com.l3ad3r1.octojotter:drawable/splash_icon) not found.
+     error: resource style/Theme.SplashScreen (aka com.l3ad3r1.octojotter:style/Theme.SplashScreen) not found.
+     com.l3ad3r1.octojotter.app-mergeDebugResources-73:/values/values.xml:268: error: style attribute 'attr/windowSplashScreenBackground (aka com.l3ad3r1.octojotter:attr/windowSplashScreenBackground)' not found.
+     com.l3ad3r1.octojotter.app-mergeDebugResources-73:/values/values.xml:269: error: style attribute 'attr/windowSplashScreenAnimatedIcon (aka com.l3ad3r1.octojotter:attr/windowSplashScreenAnimatedIcon)' not found.
+     com.l3ad3r1.octojotter.app-mergeDebugResources-73:/values/values.xml:270: error: style attribute 'attr/postSplashScreenTheme (aka com.l3ad3r1.octojotter:attr/postSplashScreenTheme)' not found.
+     error: failed linking references.
+
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.6.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 7m 27s
+29 actionable tasks: 29 executed
+Configuration cache entry stored.

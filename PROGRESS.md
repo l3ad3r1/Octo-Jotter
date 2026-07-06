@@ -5,16 +5,18 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 
 ## Done
 - Cloned repo, JBR 21 + Android SDK (compileSdk 36.1) confirmed.
-- Generated missing Gradle wrapper pinned to Gradle 9.1.0 (AGP 9.1.1).
+- Generated missing Gradle wrapper; bumped to Gradle 9.6.1 (AGP 9.1.1 needs >= 9.3.1).
+- Renamed package `com.example` -> `com.l3ad3r1.octojotter`; app label "Octo Jotter".
+- Generated launcher icons (legacy PNG + adaptive) and splash assets from assets/logo.png.
+- Wired androidx core-splashscreen: Theme.OctoJotter.Starting + installSplashScreen().
+- Created release keystore (my-upload-key.jks) + debug.keystore (both gitignored).
 
 ## In progress
-- Committing the Gradle wrapper.
+- Building signed release APK.
 
 ## Next steps
-1. Rename package `com.example` → `com.l3ad3r1.octojotter` (namespace, applicationId, dirs, imports, manifest).
-2. Add launcher icon from user logo + Android 12 splash screen (core-splashscreen).
-3. Generate upload keystore; build signed release APK.
-4. Write README + docs, push to GitHub.
+1. Build signed release APK (env: STORE_PASSWORD/KEY_PASSWORD=octojotter).
+2. Write README + docs, push to GitHub.
 
 ## Notes
 - Build env: `JAVA_HOME=/c/Program Files/Android/Android Studio/jbr`, `ANDROID_HOME` already set.
