@@ -115,8 +115,21 @@ fetched via raw.githubusercontent (public, no token). Built so far:
   Settings → Community Plugins card + "plugins" nav route.
 - Sample plugins live: Ocean Dark, Rose Light (theme type). Verified assembleDebug.
 NOTE: minAppVersion in manifests is metadata only (not yet enforced on install).
-NEXT (phase 2): QuickJS runtime + OctoJotterApi (commands/toolbar/md-processors),
-per-plugin permissions, plugin updates, richer plugin types (snippets/templates).
+
+### Community plugins PHASE 2 built (2026-07-07) — JS scripting
+Engine choice: **Mozilla Rhino** (org.mozilla:rhino:1.7.14), pure-JVM/interpreted
+(opt level -1) — NOT QuickJS, to avoid a native .so destabilizing the build.
+- plugin/ScriptEngine.kt: sealed safe scope + ClassShutter denying ALL Java classes
+  + instruction budget (5M) via SandboxContextFactory; Mutex-confined.
+- Plugin API (JS): `octo.registerCommand(id, name, fn)` where `fn(text)->text`.
+  Manifest gains `main` (inline JS) + PluginTypes.SCRIPT.
+- VM reloads engine when enabled script plugins change; pluginCommands +
+  runPluginCommand. Editor toolbar has a plugin-commands dropdown (runs on note text).
+- Sample: Text Tools (UPPERCASE/lowercase/Title Case/Slugify/word count).
+- VERIFIED the JS in real Rhino via shell (all commands correct). assembleDebug green.
+NEXT: enforce minAppVersion on install; per-plugin permission prompts; more API
+(toolbar buttons, md post-processors, note read/write, settings); scriptUrl fetch;
+plugin updates; richer declarative types (snippets/templates).
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
