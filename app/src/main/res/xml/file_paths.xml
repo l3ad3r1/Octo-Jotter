@@ -2,4 +2,6 @@
 <paths>
     <!-- Database backups written by exportDatabase() live in filesDir/exports. -->
     <files-path name="exports" path="exports/" />
+    <!-- Downloaded update APKs, served to the package installer. -->
+    <files-path name="updates" path="updates/" />
 </paths>

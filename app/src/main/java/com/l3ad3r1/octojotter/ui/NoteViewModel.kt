@@ -61,7 +61,15 @@ sealed class UpdateStatus {
     data class Error(val message: String) : UpdateStatus()
 }
 
+sealed class DownloadStatus {
+    object Idle : DownloadStatus()
+    data class Downloading(val percent: Int) : DownloadStatus()
+    object Installing : DownloadStatus()
+    data class Failed(val message: String) : DownloadStatus()
+}
+
 class NoteViewModel(application: Application) : AndroidViewModel(application) {
+    private val logTag = "OctoJotter"
 
     private val noteDao = AppDatabase.getDatabase(application).noteDao()
     private val githubApiService = RetrofitClient.githubApiService
@@ -315,9 +323,11 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForUpdate() {
         viewModelScope.launch {
             _updateStatus.value = UpdateStatus.Checking
+            android.util.Log.i(logTag, "Update check started (current v$currentVersionName)")
             try {
                 val resp = githubApiService.getLatestRelease("l3ad3r1", "Octo-Jotter")
                 if (!resp.isSuccessful) {
+                    android.util.Log.e(logTag, "Update check HTTP ${resp.code()}")
                     _updateStatus.value = UpdateStatus.Error("Couldn't reach GitHub (HTTP ${resp.code()})")
                     return@launch
                 }
@@ -335,6 +345,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                     val apk = release.assets
                         ?.firstOrNull { it.name?.endsWith(".apk", ignoreCase = true) == true }
                         ?.downloadUrl
+                    android.util.Log.i(logTag, "Update available: v$latestTag apk=$apk")
                     _updateStatus.value = UpdateStatus.Available(
                         latestVersion = latestTag,
                         releaseUrl = release.htmlUrl ?: "https://github.com/l3ad3r1/Octo-Jotter/releases/latest",
@@ -345,8 +356,93 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                     _updateStatus.value = UpdateStatus.UpToDate
                 }
             } catch (e: Exception) {
+                android.util.Log.e(logTag, "Update check failed", e)
                 _updateStatus.value = UpdateStatus.Error(e.message ?: "Update check failed.")
             }
+        }
+    }
+
+    // ---- In-app APK download + install (replaces the old open-in-browser flow,
+    // which stalled on GitHub asset redirects and was invisible to logs) ----
+    private val _downloadStatus = MutableStateFlow<DownloadStatus>(DownloadStatus.Idle)
+    val downloadStatus: StateFlow<DownloadStatus> = _downloadStatus.asStateFlow()
+
+    fun downloadAndInstallUpdate(apkUrl: String, version: String) {
+        viewModelScope.launch {
+            _downloadStatus.value = DownloadStatus.Downloading(0)
+            android.util.Log.i(logTag, "Update download started: v$version from $apkUrl")
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val dir = java.io.File(getApplication<Application>().filesDir, "updates").apply { mkdirs() }
+                    dir.listFiles()?.forEach { it.delete() }
+                    val file = java.io.File(dir, "OctoJotter-v$version.apk")
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    val request = okhttp3.Request.Builder().url(apkUrl).build()
+                    client.newCall(request).execute().use { resp ->
+                        if (!resp.isSuccessful) throw java.io.IOException("HTTP ${resp.code} downloading APK")
+                        val body = resp.body ?: throw java.io.IOException("Empty download body")
+                        val total = body.contentLength()
+                        body.byteStream().use { input ->
+                            file.outputStream().use { output ->
+                                val buffer = ByteArray(8192)
+                                var downloaded = 0L
+                                var read = input.read(buffer)
+                                while (read != -1) {
+                                    output.write(buffer, 0, read)
+                                    downloaded += read
+                                    if (total > 0) {
+                                        _downloadStatus.value = DownloadStatus.Downloading(((downloaded * 100) / total).toInt())
+                                    }
+                                    read = input.read(buffer)
+                                }
+                            }
+                        }
+                    }
+                    android.util.Log.i(logTag, "Update downloaded: ${file.length()} bytes -> ${file.absolutePath}")
+                    Result.success(file)
+                } catch (e: Exception) {
+                    android.util.Log.e(logTag, "Update download failed", e)
+                    Result.failure(e)
+                }
+            }
+            result.onSuccess { file ->
+                _downloadStatus.value = DownloadStatus.Installing
+                launchInstaller(file)
+                _downloadStatus.value = DownloadStatus.Idle
+            }.onFailure {
+                _downloadStatus.value = DownloadStatus.Failed(it.message ?: "Download failed")
+            }
+        }
+    }
+
+    private fun launchInstaller(file: java.io.File) {
+        val context = getApplication<Application>()
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            android.util.Log.i(logTag, "Installer launched for ${file.name}")
+        } catch (e: Exception) {
+            android.util.Log.e(logTag, "Failed to launch installer", e)
+            _downloadStatus.value = DownloadStatus.Failed("Couldn't open installer: ${e.message}")
+        }
+    }
+
+    fun clearDownloadStatus() { _downloadStatus.value = DownloadStatus.Idle }
+
+    /** Read the app's own recent logcat output (for the hidden debug screen). */
+    suspend fun readDebugLogs(): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "800"))
+            process.inputStream.bufferedReader().use { it.readText() }.ifBlank { "(no logs captured)" }
+        } catch (e: Exception) {
+            "Failed to read logs: ${e.message}"
         }
     }
 
@@ -408,6 +504,11 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         repository.getNotesFilteredAndSorted(query, sort)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Unfiltered notes for building the nested folder tree in the drawer
+    // (independent of search / folder / tag selection).
+    val allNotesForFolders: StateFlow<List<NoteEntity>> =
+        repository.allNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Combine custom folders and actual note folders
     val allFolders: StateFlow<List<String>> = combine(customFolders, allNotes) { custom, notes ->
         val used = notes.flatMap { it.folderPath }.filter { it.isNotBlank() }
@@ -437,8 +538,13 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             val visible = if (pending.isEmpty()) notes else notes.filter { it.id !in pending }
             when (selectedFolder) {
                 null -> visible
-                "Uncategorized" -> visible.filter { it.folderPath.isEmpty() }
-                else -> visible.filter { it.folderPath.contains(selectedFolder) }
+                "Uncategorized" -> visible.filter { it.locationPath.isEmpty() }
+                // selectedFolder is now a full path ("Repo/Folder/Sub"); match that
+                // folder and everything nested beneath it.
+                else -> visible.filter {
+                    val p = it.locationPath.joinToString("/")
+                    p == selectedFolder || p.startsWith("$selectedFolder/")
+                }
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

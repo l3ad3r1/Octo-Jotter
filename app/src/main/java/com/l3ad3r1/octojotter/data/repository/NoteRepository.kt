@@ -16,6 +16,8 @@ import android.util.Base64
 import kotlinx.coroutines.flow.Flow
 import java.io.IOException
 
+private const val MAX_REPO_PAGES = 20
+
 class NoteRepository(
     private val noteDao: NoteDao,
     private val githubApiService: GithubApiService,
@@ -149,19 +151,29 @@ class NoteRepository(
                 .replace("%2F", "/")
         }
 
-    /** List "owner/repo" for every repository the token can access (owner-affiliated). */
+    /** List "owner/repo" for every repository the token can access, across all pages. */
     suspend fun listAccessibleRepositories(): Result<List<String>> {
         val token = tokenManager.getToken()
             ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
         val formattedToken = "Bearer $token"
         return try {
-            val response = githubApiService.getUserRepos(formattedToken)
-            if (!response.isSuccessful) {
-                val hint = if (response.code() == 403) "token needs `repo` scope" else response.message()
-                return Result.failure(IOException("Couldn't list repositories (${response.code()}): $hint"))
+            val names = mutableListOf<String>()
+            var page = 1
+            while (page <= MAX_REPO_PAGES) {
+                val response = githubApiService.getUserRepos(formattedToken, page = page)
+                if (!response.isSuccessful) {
+                    if (page == 1) {
+                        val hint = if (response.code() == 403) "token needs `repo` scope" else response.message()
+                        return Result.failure(IOException("Couldn't list repositories (${response.code()}): $hint"))
+                    }
+                    break  // partial results are still useful
+                }
+                val batch = response.body().orEmpty()
+                names += batch.map { it.fullName }
+                if (batch.size < 100) break  // last page
+                page++
             }
-            val names = response.body().orEmpty().map { it.fullName }.sorted()
-            Result.success(names)
+            Result.success(names.distinct().sorted())
         } catch (e: Exception) {
             Result.failure(e)
         }

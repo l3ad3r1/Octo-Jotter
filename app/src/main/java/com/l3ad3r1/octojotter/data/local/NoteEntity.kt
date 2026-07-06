@@ -29,6 +29,16 @@ data class NoteEntity(
             emptyList()
         }
 
+    // Full nesting location for the folder tree / drawer: the repository name
+    // (for repo-backed notes) followed by the in-repo folders. Non-repo notes
+    // just use their folders. This is what makes repos nest into folders.
+    val locationPath: List<String>
+        get() = if (!repository.isNullOrBlank()) {
+            listOf(repository.substringAfterLast('/')) + folderPath
+        } else {
+            folderPath
+        }
+
     val displayTitle: String
         get() = if (title.contains("__")) {
             title.split("__").last()

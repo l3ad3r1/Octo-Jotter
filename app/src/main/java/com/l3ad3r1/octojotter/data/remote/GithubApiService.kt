@@ -107,7 +107,10 @@ interface GithubApiService {
     suspend fun getUserRepos(
         @Header("Authorization") token: String,
         @Query("per_page") perPage: Int = 100,
-        @Query("affiliation") affiliation: String = "owner",
+        @Query("page") page: Int = 1,
+        // Include repos you own, collaborate on, or can access via an org — the
+        // old "owner"-only default hid collaborator/org repos.
+        @Query("affiliation") affiliation: String = "owner,collaborator,organization_member",
         @Query("sort") sort: String = "full_name"
     ): Response<List<RepoSummary>>
 

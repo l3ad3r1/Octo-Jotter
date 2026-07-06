@@ -218,11 +218,18 @@ fun NoteApp(viewModel: NoteViewModel) {
             SettingsScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlugins = { navController.navigate("plugins") { launchSingleTop = true } }
+                onNavigateToPlugins = { navController.navigate("plugins") { launchSingleTop = true } },
+                onNavigateToDebug = { navController.navigate("debuglogs") { launchSingleTop = true } }
             )
         }
         composable("plugins") {
             CommunityPluginsScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("debuglogs") {
+            DebugLogScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
@@ -246,6 +253,9 @@ fun NotesListScreen(
     val syncState by viewModel.syncState.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
     val allFolders by viewModel.allFolders.collectAsState()
+    val allNotesForFolders by viewModel.allNotesForFolders.collectAsState()
+    val customFolders by viewModel.customFolders.collectAsState()
+    val drawerFolderExpanded = remember { mutableStateMapOf<String, Boolean>() }
 
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -347,41 +357,96 @@ fun NotesListScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // Custom folders list
+                // Nested folder tree — repos nest into their folders. Built from
+                // all notes' locationPath, plus any empty custom folders.
+                val drawerTree = remember(allNotesForFolders, customFolders) {
+                    buildFolderTree(allNotesForFolders).also { root ->
+                        customFolders.forEach { name ->
+                            root.children.getOrPut(name) { FolderTreeNode(name, name) }
+                        }
+                    }
+                }
+                val drawerRows = remember(drawerTree, drawerFolderExpanded.toMap()) {
+                    mutableListOf<FolderTreeRow>().also {
+                        flattenFolderTree(drawerTree, 0, drawerFolderExpanded, it)
+                    }
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    items(allFolders) { folder ->
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Default.Folder, contentDescription = null) },
-                            label = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(folder, modifier = Modifier.weight(1f))
-                                    IconButton(
-                                        onClick = { viewModel.deleteFolder(folder) },
-                                        modifier = Modifier.testTag("delete_folder_$folder")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Folder",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
+                    items(
+                        drawerRows.filterIsInstance<FolderRow>(),
+                        key = { "drawer_${it.node.path}" }
+                    ) { row ->
+                        val hasChildren = row.node.children.isNotEmpty()
+                        val isSelected = selectedFolder == row.node.path
+                        val isCustomTop = row.depth == 0 && row.node.path in customFolders
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = (12 + row.depth * 16).dp, end = 12.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                                    else Color.Transparent
+                                )
+                                .clickable {
+                                    viewModel.selectFolder(row.node.path)
+                                    scope.launch { drawerState.close() }
                                 }
-                            },
-                            selected = selectedFolder == folder,
-                            onClick = {
-                                viewModel.selectFolder(folder)
-                                scope.launch { drawerState.close() }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp).testTag("folder_item_$folder")
-                        )
+                                .padding(vertical = 8.dp, horizontal = 8.dp)
+                                .testTag("folder_item_${row.node.path}"),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (hasChildren) {
+                                IconButton(
+                                    onClick = { drawerFolderExpanded[row.node.path] = !row.expanded },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (row.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = if (row.expanded) "Collapse" else "Expand"
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.width(28.dp))
+                            }
+                            Icon(
+                                imageVector = if (row.expanded && hasChildren) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = row.node.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (row.node.noteCount > 0) {
+                                Text(
+                                    text = "${row.node.noteCount}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (isCustomTop && row.node.noteCount == 0) {
+                                IconButton(
+                                    onClick = { viewModel.deleteFolder(row.node.name) },
+                                    modifier = Modifier.size(28.dp).testTag("delete_folder_${row.node.name}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Folder",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1026,7 +1091,7 @@ private fun buildFolderTree(notes: List<NoteEntity>): FolderTreeNode {
     for (note in notes) {
         var cur = root
         val acc = StringBuilder()
-        for (seg in note.folderPath) {
+        for (seg in note.locationPath) {
             if (acc.isNotEmpty()) acc.append("/")
             acc.append(seg)
             cur = cur.children.getOrPut(seg) { FolderTreeNode(seg, acc.toString()) }
@@ -2029,12 +2094,16 @@ fun SaveStatusIndicator(saveStatus: SaveStatus) {
 fun SettingsScreen(
     viewModel: NoteViewModel,
     onNavigateBack: () -> Unit = {},
-    onNavigateToPlugins: () -> Unit = {}
+    onNavigateToPlugins: () -> Unit = {},
+    onNavigateToDebug: () -> Unit = {}
 ) {
+    // Tapping the version number 7x reveals the hidden debug log viewer.
+    var versionTaps by remember { mutableStateOf(0) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val lastExportedPath by viewModel.lastExportedPath.collectAsState()
     val updateStatus by viewModel.updateStatus.collectAsState()
+    val downloadStatus by viewModel.downloadStatus.collectAsState()
     val token by viewModel.githubToken.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
@@ -2600,7 +2669,16 @@ fun SettingsScreen(
                     Text(
                         text = "Current version ${viewModel.currentVersionName}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .clickable {
+                                versionTaps++
+                                if (versionTaps >= 7) {
+                                    versionTaps = 0
+                                    onNavigateToDebug()
+                                }
+                            }
+                            .testTag("version_tap_target")
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -2632,13 +2710,47 @@ fun SettingsScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Button(
-                                onClick = { uriHandler.openUri(status.apkUrl ?: status.releaseUrl) },
-                                modifier = Modifier.fillMaxWidth().testTag("download_update_button")
-                            ) {
-                                Icon(Icons.Default.Download, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(if (status.apkUrl != null) "Download v${status.latestVersion}" else "View release")
+                            val dl = downloadStatus
+                            if (status.apkUrl != null) {
+                                Button(
+                                    onClick = { viewModel.downloadAndInstallUpdate(status.apkUrl, status.latestVersion) },
+                                    enabled = dl !is DownloadStatus.Downloading && dl !is DownloadStatus.Installing,
+                                    modifier = Modifier.fillMaxWidth().testTag("download_update_button")
+                                ) {
+                                    when (dl) {
+                                        is DownloadStatus.Downloading -> {
+                                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Downloading ${dl.percent}%")
+                                        }
+                                        DownloadStatus.Installing -> Text("Opening installer…")
+                                        else -> {
+                                            Icon(Icons.Default.Download, contentDescription = null)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Download & install v${status.latestVersion}")
+                                        }
+                                    }
+                                }
+                                if (dl is DownloadStatus.Failed) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = dl.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    TextButton(onClick = { uriHandler.openUri(status.releaseUrl) }) {
+                                        Text("Open release in browser instead")
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = { uriHandler.openUri(status.releaseUrl) },
+                                    modifier = Modifier.fillMaxWidth().testTag("download_update_button")
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("View release")
+                                }
                             }
                         }
                         else -> {
