@@ -18,8 +18,19 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 - Published GitHub Release v1.0 with app-release.apk:
   https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.0
 
-## Status: COMPLETE
-All requested work done — clone, rename, icon, splash, release APK, README, release.
+## Status: v1.0 shipped; now on UI/UX design pass
+v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
+8 High / 10 Medium / 5 Low).
+
+### Design improvements in progress (against the critique)
+- DONE Phase 1: octopus-blue Material 3 theme (light + dark) in Color.kt/Theme.kt;
+  dynamicColor default false; fixed "Octojot" -> "Octo Jotter" title. (review #1)
+- DONE Phase 2: swipe-to-delete + Undo Snackbar (pending-deletion pattern in
+  NoteViewModel); removed redundant card trash icon; restored 48dp touch targets
+  on pin / drawer-folder-delete / add-tag buttons. (review #3, #4, #5)
+- NEXT: semantic status colors (kill ~20 hardcoded hex; fix dark-mode contrast),
+  app-bar consistency, IME-aware editor toolbar, settings restructure, empty-state copy.
+- Then: rebuild + publish updated APK.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
