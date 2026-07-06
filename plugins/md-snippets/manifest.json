@@ -1,0 +1,17 @@
+{
+  "id": "md-snippets",
+  "name": "Markdown Snippets",
+  "version": "1.0.0",
+  "minAppVersion": "1.7",
+  "author": "l3ad3r1",
+  "description": "Insertable Markdown templates: callout, table, code block, task list, front-matter.",
+  "type": "snippet",
+  "permissions": [],
+  "snippets": [
+    { "id": "callout", "name": "Callout (note)", "content": "> [!note]\n> " },
+    { "id": "table", "name": "Table (2x2)", "content": "| Column A | Column B |\n| --- | --- |\n| a | b |\n" },
+    { "id": "code", "name": "Code block", "content": "```\n\n```\n" },
+    { "id": "tasks", "name": "Task list", "content": "- [ ] \n- [ ] \n- [ ] \n" },
+    { "id": "frontmatter", "name": "Front-matter", "content": "---\ntitle: \ntags: \ndate: \n---\n\n" }
+  ]
+}

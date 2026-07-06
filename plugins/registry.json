@@ -26,6 +26,15 @@
       "type": "script",
       "version": "1.0.0",
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/text-tools/manifest.json"
+    },
+    {
+      "id": "md-snippets",
+      "name": "Markdown Snippets",
+      "author": "l3ad3r1",
+      "description": "Insertable Markdown templates: callout, table, code block, task list, front-matter.",
+      "type": "snippet",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/md-snippets/manifest.json"
     }
   ]
 }
