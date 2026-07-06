@@ -11,30 +11,69 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme =
-  darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+  darkColorScheme(
+    primary = md_primary_dark,
+    onPrimary = md_onPrimary_dark,
+    primaryContainer = md_primaryContainer_dark,
+    onPrimaryContainer = md_onPrimaryContainer_dark,
+    secondary = md_secondary_dark,
+    onSecondary = md_onSecondary_dark,
+    secondaryContainer = md_secondaryContainer_dark,
+    onSecondaryContainer = md_onSecondaryContainer_dark,
+    tertiary = md_tertiary_dark,
+    onTertiary = md_onTertiary_dark,
+    tertiaryContainer = md_tertiaryContainer_dark,
+    onTertiaryContainer = md_onTertiaryContainer_dark,
+    error = md_error_dark,
+    onError = md_onError_dark,
+    errorContainer = md_errorContainer_dark,
+    onErrorContainer = md_onErrorContainer_dark,
+    background = md_background_dark,
+    onBackground = md_onBackground_dark,
+    surface = md_surface_dark,
+    onSurface = md_onSurface_dark,
+    surfaceVariant = md_surfaceVariant_dark,
+    onSurfaceVariant = md_onSurfaceVariant_dark,
+    surfaceContainer = md_surfaceContainer_dark,
+    outline = md_outline_dark,
+    outlineVariant = md_outlineVariant_dark,
+  )
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primary = md_primary_light,
+    onPrimary = md_onPrimary_light,
+    primaryContainer = md_primaryContainer_light,
+    onPrimaryContainer = md_onPrimaryContainer_light,
+    secondary = md_secondary_light,
+    onSecondary = md_onSecondary_light,
+    secondaryContainer = md_secondaryContainer_light,
+    onSecondaryContainer = md_onSecondaryContainer_light,
+    tertiary = md_tertiary_light,
+    onTertiary = md_onTertiary_light,
+    tertiaryContainer = md_tertiaryContainer_light,
+    onTertiaryContainer = md_onTertiaryContainer_light,
+    error = md_error_light,
+    onError = md_onError_light,
+    errorContainer = md_errorContainer_light,
+    onErrorContainer = md_onErrorContainer_light,
+    background = md_background_light,
+    onBackground = md_onBackground_light,
+    surface = md_surface_light,
+    onSurface = md_onSurface_light,
+    surfaceVariant = md_surfaceVariant_light,
+    onSurfaceVariant = md_onSurfaceVariant_light,
+    surfaceContainer = md_surfaceContainer_light,
+    outline = md_outline_light,
+    outlineVariant = md_outlineVariant_light,
   )
 
 @Composable
 fun MyApplicationTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
+  // Brand-first by default: use the Octo Jotter palette rather than wallpaper colors.
+  // Users can opt back into Material You via the "Use system colors" setting.
+  dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =

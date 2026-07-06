@@ -356,7 +356,7 @@ fun NotesListScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(selectedFolder ?: "Octojot", fontWeight = FontWeight.Bold) },
+                    title = { Text(selectedFolder ?: "Octo Jotter", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(
                             onClick = {
