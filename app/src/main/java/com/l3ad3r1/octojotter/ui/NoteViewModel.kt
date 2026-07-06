@@ -136,6 +136,67 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- Community plugins ----
+    private val pluginRepository =
+        com.l3ad3r1.octojotter.plugin.PluginRepository(AppDatabase.getDatabase(application).pluginDao())
+
+    val installedPlugins: StateFlow<List<com.l3ad3r1.octojotter.data.local.PluginEntity>> =
+        pluginRepository.installedPlugins
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _registryPlugins = MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>>(emptyList())
+    val registryPlugins: StateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>> = _registryPlugins.asStateFlow()
+
+    private val _isLoadingPlugins = MutableStateFlow(false)
+    val isLoadingPlugins: StateFlow<Boolean> = _isLoadingPlugins.asStateFlow()
+
+    private val _pluginMessage = MutableStateFlow<String?>(null)
+    val pluginMessage: StateFlow<String?> = _pluginMessage.asStateFlow()
+
+    // Active theme supplied by an enabled theme plugin (overrides built-in palette).
+    val activePluginTheme: StateFlow<com.l3ad3r1.octojotter.ui.theme.PluginThemeState?> =
+        pluginRepository.enabledThemePlugin.map { entity ->
+            val spec = entity?.let { pluginRepository.parseManifest(it) }?.theme
+            spec?.let {
+                com.l3ad3r1.octojotter.ui.theme.PluginThemeState(
+                    dark = it.dark,
+                    colorScheme = com.l3ad3r1.octojotter.ui.theme.buildPluginColorScheme(it)
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun refreshPluginRegistry() {
+        viewModelScope.launch {
+            _isLoadingPlugins.value = true
+            val result = pluginRepository.fetchRegistry()
+            _isLoadingPlugins.value = false
+            result
+                .onSuccess { _registryPlugins.value = it }
+                .onFailure { _pluginMessage.value = "Couldn't load plugins: ${it.message}" }
+        }
+    }
+
+    fun installPlugin(entry: com.l3ad3r1.octojotter.plugin.RegistryEntry) {
+        viewModelScope.launch {
+            pluginRepository.install(entry)
+                .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
+                .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
+        }
+    }
+
+    fun setPluginEnabled(plugin: com.l3ad3r1.octojotter.data.local.PluginEntity, enabled: Boolean) {
+        viewModelScope.launch { pluginRepository.setEnabled(plugin, enabled) }
+    }
+
+    fun uninstallPlugin(plugin: com.l3ad3r1.octojotter.data.local.PluginEntity) {
+        viewModelScope.launch {
+            pluginRepository.uninstall(plugin)
+            _pluginMessage.value = "Removed ${plugin.name}"
+        }
+    }
+
+    fun clearPluginMessage() { _pluginMessage.value = null }
+
     // DB Backup export preferences/status
     private val _exportStatus = MutableStateFlow<String?>(null)
     val exportStatus: StateFlow<String?> = _exportStatus.asStateFlow()

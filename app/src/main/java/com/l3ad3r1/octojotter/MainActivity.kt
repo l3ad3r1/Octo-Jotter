@@ -23,12 +23,17 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     setContent {
       val themeMode by viewModel.themeMode.collectAsState()
-      val darkTheme = when (themeMode) {
+      val pluginTheme by viewModel.activePluginTheme.collectAsState()
+      // An enabled theme plugin overrides both the palette and dark/light.
+      val darkTheme = pluginTheme?.dark ?: when (themeMode) {
         "dark" -> true
         "light" -> false
         else -> isSystemInDarkTheme()
       }
-      MyApplicationTheme(darkTheme = darkTheme) {
+      MyApplicationTheme(
+        darkTheme = darkTheme,
+        overrideColorScheme = pluginTheme?.colorScheme
+      ) {
         NoteApp(viewModel = viewModel)
       }
     }
