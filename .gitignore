@@ -21,3 +21,4 @@ debug.keystore
 # build logs
 /build-debug.log
 /build-release.log
+build-*.log
