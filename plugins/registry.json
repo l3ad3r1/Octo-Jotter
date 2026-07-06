@@ -17,6 +17,15 @@
       "type": "theme",
       "version": "1.0.0",
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/rose-light/manifest.json"
+    },
+    {
+      "id": "text-tools",
+      "name": "Text Tools",
+      "author": "l3ad3r1",
+      "description": "Editor commands: UPPERCASE, lowercase, Title Case, Slugify, word count.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/text-tools/manifest.json"
     }
   ]
 }

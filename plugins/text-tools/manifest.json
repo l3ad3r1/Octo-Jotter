@@ -1,0 +1,11 @@
+{
+  "id": "text-tools",
+  "name": "Text Tools",
+  "version": "1.0.0",
+  "minAppVersion": "1.6",
+  "author": "l3ad3r1",
+  "description": "Editor commands to transform note text: UPPERCASE, lowercase, Title Case, Slugify, and word count.",
+  "type": "script",
+  "permissions": [],
+  "main": "octo.registerCommand(\"upper\", \"UPPERCASE\", function(t){ return String(t).toUpperCase(); });\nocto.registerCommand(\"lower\", \"lowercase\", function(t){ return String(t).toLowerCase(); });\nocto.registerCommand(\"title\", \"Title Case\", function(t){ return String(t).replace(/\\w\\S*/g, function(w){ return w.charAt(0).toUpperCase() + w.substr(1).toLowerCase(); }); });\nocto.registerCommand(\"slug\", \"Slugify\", function(t){ return String(t).toLowerCase().replace(/[^a-z0-9]+/g, \"-\").replace(/^-+|-+$/g, \"\"); });\nocto.registerCommand(\"wc\", \"Append Word Count\", function(t){ var s = String(t); var m = s.match(/\\S+/g); var n = m ? m.length : 0; return s + \"\\n\\n_Word count: \" + n + \"_\"; });"
+}
