@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,12 +31,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -60,6 +65,37 @@ fun CommunityPluginsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit 
     }
 
     val installedById = installed.associateBy { it.id }
+
+    // Plugins that request permissions require explicit consent before install.
+    var pendingInstall by remember { mutableStateOf<RegistryEntry?>(null) }
+    val requestInstall: (RegistryEntry) -> Unit = { entry ->
+        if (entry.permissions.isEmpty()) viewModel.installPlugin(entry) else pendingInstall = entry
+    }
+
+    pendingInstall?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingInstall = null },
+            title = { Text("Install ${entry.name}?") },
+            text = {
+                Column {
+                    Text("This plugin requests permission to:")
+                    Spacer(Modifier.height(8.dp))
+                    entry.permissions.forEach { perm ->
+                        Text("•  $perm", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.installPlugin(entry)
+                    pendingInstall = null
+                }) { Text("Install") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingInstall = null }) { Text("Cancel") }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -158,7 +194,7 @@ fun CommunityPluginsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit 
                     RegistryPluginRow(
                         entry = entry,
                         installed = installedById[entry.id] != null,
-                        onInstall = { viewModel.installPlugin(entry) }
+                        onInstall = { requestInstall(entry) }
                     )
                 }
             }

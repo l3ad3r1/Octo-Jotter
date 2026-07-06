@@ -39,6 +39,10 @@ class PluginRepository(private val pluginDao: PluginDao) {
     val enabledScriptPlugins: Flow<List<PluginEntity>> =
         pluginDao.getEnabledByTypeFlow(PluginTypes.SCRIPT)
 
+    // All enabled snippet plugins (each contributes insertable templates).
+    val enabledSnippetPlugins: Flow<List<PluginEntity>> =
+        pluginDao.getEnabledByTypeFlow(PluginTypes.SNIPPET)
+
     /** Fetch the community registry index. */
     suspend fun fetchRegistry(url: String = DEFAULT_REGISTRY_URL): Result<List<RegistryEntry>> =
         withContext(Dispatchers.IO) {
@@ -53,11 +57,16 @@ class PluginRepository(private val pluginDao: PluginDao) {
         }
 
     /** Download a plugin's manifest and store it locally (disabled until enabled). */
-    suspend fun install(entry: RegistryEntry): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun install(entry: RegistryEntry, appVersion: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val manifestJson = httpGet(entry.manifestUrl)
             val manifest = manifestAdapter.fromJson(manifestJson)
                 ?: return@withContext Result.failure(IOException("Malformed plugin manifest."))
+            if (!meetsMinVersion(manifest.minAppVersion, appVersion)) {
+                return@withContext Result.failure(
+                    IOException("${manifest.name} needs Octo Jotter ${manifest.minAppVersion}+ (you have $appVersion). Please update the app.")
+                )
+            }
             pluginDao.upsert(
                 PluginEntity(
                     id = manifest.id,
@@ -92,6 +101,20 @@ class PluginRepository(private val pluginDao: PluginDao) {
 
     fun parseManifest(plugin: PluginEntity): PluginManifest? =
         try { manifestAdapter.fromJson(plugin.payloadJson) } catch (e: Exception) { null }
+
+    // True if [appVersion] >= [min] (dotted numeric compare); null/blank min = no floor.
+    private fun meetsMinVersion(min: String?, appVersion: String): Boolean {
+        if (min.isNullOrBlank()) return true
+        fun parts(v: String) = v.split(".", "-").map { it.toIntOrNull() ?: 0 }
+        val a = parts(appVersion)
+        val m = parts(min)
+        for (i in 0 until maxOf(a.size, m.size)) {
+            val av = a.getOrElse(i) { 0 }
+            val mv = m.getOrElse(i) { 0 }
+            if (av != mv) return av > mv
+        }
+        return true
+    }
 
     private fun httpGet(url: String): String {
         val request = Request.Builder().url(url).header("Accept", "application/json").build()

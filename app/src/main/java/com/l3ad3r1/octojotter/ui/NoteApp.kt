@@ -35,6 +35,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudDownload
@@ -1101,6 +1103,7 @@ fun EditorScreen(
     val pendingDraft by viewModel.pendingDraft.collectAsState()
     val availableFolders by viewModel.allFolders.collectAsState()
     val pluginCommands by viewModel.pluginCommands.collectAsState()
+    val pluginSnippets by viewModel.pluginSnippets.collectAsState()
     var showPluginMenu by remember { mutableStateOf(false) }
 
     val handleExit = {
@@ -1505,8 +1508,8 @@ fun EditorScreen(
                         ) {
                             Icon(Icons.Default.Link, contentDescription = "Wiki link")
                         }
-                        // Plugin commands (only shown when script plugins register any)
-                        if (pluginCommands.isNotEmpty()) {
+                        // Plugin commands + snippets (shown when any are contributed)
+                        if (pluginCommands.isNotEmpty() || pluginSnippets.isNotEmpty()) {
                             Box {
                                 IconButton(
                                     onClick = { showPluginMenu = true },
@@ -1518,9 +1521,11 @@ fun EditorScreen(
                                     expanded = showPluginMenu,
                                     onDismissRequest = { showPluginMenu = false }
                                 ) {
+                                    // Script commands: transform the whole note text.
                                     pluginCommands.forEach { cmd ->
                                         DropdownMenuItem(
                                             text = { Text(cmd.name) },
+                                            leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null) },
                                             onClick = {
                                                 showPluginMenu = false
                                                 scope.launch {
@@ -1535,6 +1540,26 @@ fun EditorScreen(
                                                 }
                                             },
                                             modifier = Modifier.testTag("plugin_command_${cmd.pluginId}_${cmd.id}")
+                                        )
+                                    }
+                                    // Snippets: insert their content at the cursor.
+                                    pluginSnippets.forEach { snippet ->
+                                        DropdownMenuItem(
+                                            text = { Text(snippet.name) },
+                                            leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null) },
+                                            onClick = {
+                                                showPluginMenu = false
+                                                val tfv = textFieldValue
+                                                val start = tfv.selection.start
+                                                val end = tfv.selection.end
+                                                val newText = tfv.text.substring(0, start) + snippet.content + tfv.text.substring(end)
+                                                textFieldValue = TextFieldValue(
+                                                    text = newText,
+                                                    selection = androidx.compose.ui.text.TextRange(start + snippet.content.length)
+                                                )
+                                                viewModel.onNoteTextChanged(editorTitle, newText)
+                                            },
+                                            modifier = Modifier.testTag("plugin_snippet_${snippet.id}")
                                         )
                                     }
                                 }

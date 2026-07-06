@@ -26,6 +26,8 @@ data class RegistryEntry(
     @Json(name = "description") val description: String? = null,
     @Json(name = "type") val type: String = "theme",
     @Json(name = "version") val version: String? = null,
+    // Summary of permissions the plugin requests, surfaced before install.
+    @Json(name = "permissions") val permissions: List<String> = emptyList(),
     // Absolute URL (raw GitHub) of this plugin's manifest.json.
     @Json(name = "manifestUrl") val manifestUrl: String
 )
@@ -45,7 +47,17 @@ data class PluginManifest(
     // Present when type == "script": inline JavaScript source. `scriptUrl` is
     // reserved for fetching the script from a separate file (not yet used).
     @Json(name = "main") val main: String? = null,
-    @Json(name = "scriptUrl") val scriptUrl: String? = null
+    @Json(name = "scriptUrl") val scriptUrl: String? = null,
+    // Present when type == "snippet": insertable text templates.
+    @Json(name = "snippets") val snippets: List<SnippetSpec>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SnippetSpec(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String,
+    // Text inserted at the cursor. May contain \n and Markdown.
+    @Json(name = "content") val content: String
 )
 
 @JsonClass(generateAdapter = true)
@@ -59,4 +71,5 @@ data class ThemeSpec(
 object PluginTypes {
     const val THEME = "theme"
     const val SCRIPT = "script"
+    const val SNIPPET = "snippet"
 }

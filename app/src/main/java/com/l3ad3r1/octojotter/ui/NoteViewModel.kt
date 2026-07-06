@@ -178,7 +178,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun installPlugin(entry: com.l3ad3r1.octojotter.plugin.RegistryEntry) {
         viewModelScope.launch {
-            pluginRepository.install(entry)
+            pluginRepository.install(entry, currentVersionName)
                 .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
                 .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
         }
@@ -216,6 +216,12 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    // Insertable snippets contributed by enabled snippet plugins.
+    val pluginSnippets: StateFlow<List<com.l3ad3r1.octojotter.plugin.SnippetSpec>> =
+        pluginRepository.enabledSnippetPlugins.map { list ->
+            list.flatMap { entity -> pluginRepository.parseManifest(entity)?.snippets ?: emptyList() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Run a plugin command on [input], returning transformed text (or null on error). */
     suspend fun runPluginCommand(
