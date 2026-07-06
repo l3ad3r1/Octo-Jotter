@@ -148,6 +148,21 @@ Engine choice: **Mozilla Rhino** (org.mozilla:rhino:1.7.14), pure-JVM/interprete
 NEXT: more APIs (clipboard, note read-content, settings), md post-processors /
 custom toolbar buttons; scriptUrl fetch; plugin updates; per-permission partial grant.
 
+### v1.9 (2026-07-07) — updater fix, hidden logs, nested drawer, repo discovery
+- In-app APK downloader (OkHttp stream → filesDir/updates → FileProvider install
+  intent, REQUEST_INSTALL_PACKAGES) replaces open-in-browser (which stalled on GH
+  asset redirects). Progress % + logging + browser fallback. DownloadStatus in VM.
+- Hidden Debug Logs screen: tap "Current version" 7× (versionTaps) → nav "debuglogs"
+  → DebugLogScreen reads `logcat -d` (own UID), copy/share. Updater logs via tag "OctoJotter".
+- Nested drawer: NoteEntity.locationPath = repo-name + folders; buildFolderTree now
+  uses locationPath (drawer + grouped list nest by repo); selectedFolder is a full
+  PATH now; filteredNotes matches path prefix. Drawer renders expand/collapse tree
+  with counts; empty custom folders merged as top-level (deletable).
+- Repo discovery: getUserRepos affiliation owner→owner,collaborator,organization_member
+  + pagination (MAX_REPO_PAGES=20) in listAccessibleRepositories. Fixes missing repos.
+NOTE: v1.8 users update via the OLD browser updater to GET v1.9; the in-app downloader
+takes effect from v1.9 onward.
+
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
   REGENERATED a new upload key 2026-07-07: alias `upload`, store/key password
