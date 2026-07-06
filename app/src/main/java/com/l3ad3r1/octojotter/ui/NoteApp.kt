@@ -468,64 +468,39 @@ fun NotesListScreen(
                     .testTag("search_bar_input")
             )
 
+            // Sort + view controls in one horizontally scrollable row so they never
+            // overflow or crush each other on narrow screens.
+            val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Sort by:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    FilterChip(
-                        selected = sortBy == "LAST_MODIFIED",
-                        onClick = { viewModel.updateSortBy("LAST_MODIFIED") },
-                        label = { Text("Last Modified") },
-                        leadingIcon = if (sortBy == "LAST_MODIFIED") {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier.testTag("sort_by_modified_chip")
-                    )
-                    FilterChip(
-                        selected = sortBy == "TITLE",
-                        onClick = { viewModel.updateSortBy("TITLE") },
-                        label = { Text("Title") },
-                        leadingIcon = if (sortBy == "TITLE") {
-                            {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier.testTag("sort_by_title_chip")
-                    )
-                }
-
-                val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
+                FilterChip(
+                    selected = sortBy == "LAST_MODIFIED",
+                    onClick = { viewModel.updateSortBy("LAST_MODIFIED") },
+                    label = { Text("Recent") },
+                    leadingIcon = if (sortBy == "LAST_MODIFIED") {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null,
+                    modifier = Modifier.testTag("sort_by_modified_chip")
+                )
+                FilterChip(
+                    selected = sortBy == "TITLE",
+                    onClick = { viewModel.updateSortBy("TITLE") },
+                    label = { Text("Title") },
+                    leadingIcon = if (sortBy == "TITLE") {
+                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    } else null,
+                    modifier = Modifier.testTag("sort_by_title_chip")
+                )
                 FilterChip(
                     selected = isFolderTreeView,
                     onClick = { viewModel.toggleFolderTreeView() },
-                    label = { Text(if (isFolderTreeView) "Folder View" else "Flat View") },
+                    label = { Text(if (isFolderTreeView) "Grouped" else "List") },
                     leadingIcon = {
                         Icon(
                             imageVector = if (isFolderTreeView) Icons.Default.Folder else Icons.Default.List,
@@ -842,7 +817,7 @@ fun NotesListScreen(
                     if (isFolderTreeView) {
                         val groupedNotes = remember(notes) {
                             notes.groupBy { note ->
-                                if (note.folderPath.isEmpty()) "Root Notes" else note.folderPath.joinToString(" ➔ ")
+                                if (note.folderPath.isEmpty()) "Root Notes" else note.folderPath.joinToString(" / ")
                             }
                         }
                         val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
