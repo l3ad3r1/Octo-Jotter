@@ -28,9 +28,20 @@ v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
 - DONE Phase 2: swipe-to-delete + Undo Snackbar (pending-deletion pattern in
   NoteViewModel); removed redundant card trash icon; restored 48dp touch targets
   on pin / drawer-folder-delete / add-tag buttons. (review #3, #4, #5)
-- NEXT: semantic status colors (kill ~20 hardcoded hex; fix dark-mode contrast),
-  app-bar consistency, IME-aware editor toolbar, settings restructure, empty-state copy.
-- Then: rebuild + publish updated APK.
+- DONE Phase 3: semantic status colors via OctoStatusColors CompositionLocal
+  (light/dark, WCAG AA); offline = neutral; preview headings onSurface. (#2 + mediums)
+- DONE Phase 4a: editor IME-aware scrollable toolbar + H1/code/checkbox/wiki-link;
+  tag chips remove only via ✕; preview renders - [ ] / - [x]. (#7, #8, md coverage)
+- DONE Phase 4b: Settings retitled; full-width Save + guarded "Disconnect GitHub";
+  Close (not trash) dismiss; empty state = "Create your first note"; editor app bar
+  matches others; relative timestamps on cards. (token safety + mediums/low)
+- Verified: assembleDebug green after every batch.
+
+### Remaining review items (not yet done)
+- #6 bottom-nav removal (High, STRUCTURAL — needs owner sign-off before removing nav).
+- Note-card density (icon-only sync, cap tags), filter-row overflow, folder cards-in-cards.
+- DB export share sheet; markdown italic-vs-bold regex bug + highlight caching (perf).
+- Then: rebuild + publish updated APK (v1.1).
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
