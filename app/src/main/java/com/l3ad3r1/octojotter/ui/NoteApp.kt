@@ -154,6 +154,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.l3ad3r1.octojotter.data.local.NoteEntity
+import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
+import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
+import com.l3ad3r1.octojotter.ui.theme.DarkStatusColors
+import com.l3ad3r1.octojotter.ui.theme.octoStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -411,14 +415,16 @@ fun NotesListScreen(
                                 Icon(
                                     imageVector = Icons.Default.CloudDone,
                                     contentDescription = "Synced",
-                                    tint = Color(0xFF4CAF50)
+                                    tint = MaterialTheme.octoStatus.syncOk
                                 )
                             }
                             SyncState.Offline -> {
+                                // Offline is a normal state for an offline-first app,
+                                // so use a neutral tint rather than alarming error red.
                                 Icon(
                                     imageVector = Icons.Default.CloudOff,
                                     contentDescription = "Offline",
-                                    tint = Color(0xFFE53935)
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                                 )
                             }
                         }
@@ -1015,10 +1021,11 @@ fun NotesListScreen(
 
 @Composable
 fun SyncStatusBadge(note: NoteEntity) {
+    val status = MaterialTheme.octoStatus
     val (text, color, icon) = when {
-        note.needsSync -> Triple("Pending Sync", Color(0xFFF2994A), Icons.Default.CloudQueue)
-        !note.gistId.isNullOrEmpty() -> Triple("Synced", Color(0xFF27AE60), Icons.Default.CloudDone)
-        else -> Triple("Local Only", Color(0xFF828282), Icons.Default.CloudOff)
+        note.needsSync -> Triple("Pending Sync", status.syncPending, Icons.Default.CloudQueue)
+        !note.gistId.isNullOrEmpty() -> Triple("Synced", status.syncOk, Icons.Default.CloudDone)
+        else -> Triple("Local Only", status.localOnly, Icons.Default.CloudOff)
     }
 
     Row(
@@ -2202,6 +2209,7 @@ fun MarkdownPreview(
     onHashtagClick: ((String) -> Unit)? = null
 ) {
     val lines = markdown.lines()
+    val status = MaterialTheme.octoStatus
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -2223,7 +2231,7 @@ fun MarkdownPreview(
                             text = line.substring(2),
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
@@ -2232,7 +2240,7 @@ fun MarkdownPreview(
                             text = line.substring(3),
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
@@ -2241,7 +2249,7 @@ fun MarkdownPreview(
                             text = line.substring(4),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.tertiary,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 2.dp)
                         )
                     }
@@ -2260,7 +2268,7 @@ fun MarkdownPreview(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             AutolinkText(
-                                text = autoLinkUrls(parseInlineStyles(line.substring(2)), MaterialTheme.colorScheme.primary),
+                                text = autoLinkUrls(parseInlineStyles(line.substring(2), status), MaterialTheme.colorScheme.primary),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2281,7 +2289,7 @@ fun MarkdownPreview(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             AutolinkText(
-                                text = autoLinkUrls(parseInlineStyles(line.substring(2)), MaterialTheme.colorScheme.primary),
+                                text = autoLinkUrls(parseInlineStyles(line.substring(2), status), MaterialTheme.colorScheme.primary),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 onWikiLinkClick = onWikiLinkClick,
@@ -2292,7 +2300,7 @@ fun MarkdownPreview(
                     else -> {
                         if (line.isNotBlank()) {
                             AutolinkText(
-                                text = autoLinkUrls(parseInlineStyles(line), MaterialTheme.colorScheme.primary),
+                                text = autoLinkUrls(parseInlineStyles(line, status), MaterialTheme.colorScheme.primary),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.padding(vertical = 2.dp),
@@ -2394,7 +2402,7 @@ fun AutolinkText(
     }
 }
 
-fun parseInlineStyles(text: String): AnnotatedString {
+fun parseInlineStyles(text: String, colors: OctoStatusColors): AnnotatedString {
     return buildAnnotatedString {
         var i = 0
         while (i < text.length) {
@@ -2402,7 +2410,7 @@ fun parseInlineStyles(text: String): AnnotatedString {
                 val end = text.indexOf("**", i + 2)
                 if (end != -1) {
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
-                        append(parseInlineStyles(text.substring(i + 2, end)))
+                        append(parseInlineStyles(text.substring(i + 2, end), colors))
                     }
                     i = end + 2
                 } else {
@@ -2413,7 +2421,7 @@ fun parseInlineStyles(text: String): AnnotatedString {
                 val end = text.indexOf("~~", i + 2)
                 if (end != -1) {
                     withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-                        append(parseInlineStyles(text.substring(i + 2, end)))
+                        append(parseInlineStyles(text.substring(i + 2, end), colors))
                     }
                     i = end + 2
                 } else {
@@ -2424,7 +2432,7 @@ fun parseInlineStyles(text: String): AnnotatedString {
                 val end = text.indexOf("*", i + 1)
                 if (end != -1) {
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-                        append(parseInlineStyles(text.substring(i + 1, end)))
+                        append(parseInlineStyles(text.substring(i + 1, end), colors))
                     }
                     i = end + 1
                 } else {
@@ -2437,8 +2445,8 @@ fun parseInlineStyles(text: String): AnnotatedString {
                     withStyle(
                         SpanStyle(
                             fontFamily = FontFamily.Monospace,
-                            background = Color.LightGray.copy(alpha = 0.3f),
-                            color = Color(0xFFC7254E)
+                            background = colors.codeBackground,
+                            color = colors.code
                         )
                     ) {
                         append(text.substring(i + 1, end))
@@ -2455,7 +2463,7 @@ fun parseInlineStyles(text: String): AnnotatedString {
                     pushStringAnnotation(tag = "WIKILINK", annotation = targetTitle)
                     withStyle(
                         SpanStyle(
-                            color = Color(0xFF2D8CF0),
+                            color = colors.wikiLink,
                             textDecoration = TextDecoration.Underline,
                             fontWeight = FontWeight.Bold
                         )
@@ -2478,7 +2486,7 @@ fun parseInlineStyles(text: String): AnnotatedString {
                     pushStringAnnotation(tag = "HASHTAG", annotation = tagName)
                     withStyle(
                         SpanStyle(
-                            color = Color(0xFFF2994A),
+                            color = colors.hashtag,
                             fontWeight = FontWeight.Medium
                         )
                     ) {
@@ -2580,6 +2588,7 @@ class MarkdownVisualTransformation(private val isDarkTheme: Boolean) : VisualTra
 }
 
 fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
+    val sc = if (isDark) DarkStatusColors else LightStatusColors
     return buildAnnotatedString {
         append(text)
         
@@ -2657,8 +2666,8 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
             addStyle(
                 style = SpanStyle(
                     fontFamily = FontFamily.Monospace,
-                    background = if (isDark) Color(0xFF2D2D2D) else Color(0xFFF3F3F3),
-                    color = Color(0xFFC7254E)
+                    background = sc.codeBackground,
+                    color = sc.code
                 ),
                 start = match.range.first,
                 end = match.range.last + 1
@@ -2670,7 +2679,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
         wikiRegex.findAll(text).forEach { match ->
             addStyle(
                 style = SpanStyle(
-                    color = Color(0xFF2D8CF0),
+                    color = sc.wikiLink,
                     textDecoration = TextDecoration.Underline,
                     fontWeight = FontWeight.Bold
                 ),
@@ -2684,7 +2693,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
         tagRegex.findAll(text).forEach { match ->
             addStyle(
                 style = SpanStyle(
-                    color = Color(0xFFF2994A),
+                    color = sc.hashtag,
                     fontWeight = FontWeight.Medium
                 ),
                 start = match.range.first,
