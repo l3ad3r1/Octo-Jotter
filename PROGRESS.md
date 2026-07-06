@@ -137,8 +137,16 @@ Engine choice: **Mozilla Rhino** (org.mozilla:rhino:1.7.14), pure-JVM/interprete
   inserted at the cursor via the editor plugin dropdown (commands+snippets unified,
   Bolt vs Bookmark icons). Sample: Markdown Snippets (callout/table/code/tasks/frontmatter).
 - Registry now exercises all 4 types: theme, script, snippet.
-NEXT: API-level permission enforcement + sensitive APIs (note read/write, clipboard,
-network); md post-processors / custom toolbar buttons; scriptUrl fetch; plugin updates.
+### Community plugins PHASE 4 built (2026-07-07) — permission-gated APIs
+- PluginHost bridge (createNote/listNoteTitles/log) implemented in NoteViewModel
+  (runBlocking → repository). PluginPermissions: notes:read, notes:write (+describe()).
+- ScriptEngine now carries per-plugin GRANTED permissions (PluginSpec); exposes
+  octo.notes.create [notes:write], octo.notes.list [notes:read], octo.log [none];
+  requirePermission() throws to JS when a plugin calls an ungranted API = REAL enforcement.
+- Consent dialog shows human-readable descriptions. Sample: Note Actions (script,
+  notes:write) — "Duplicate as new note" / "Send tasks to new note". Verified in Rhino.
+NEXT: more APIs (clipboard, note read-content, settings), md post-processors /
+custom toolbar buttons; scriptUrl fetch; plugin updates; per-permission partial grant.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
