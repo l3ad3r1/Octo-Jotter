@@ -37,10 +37,15 @@ v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
   matches others; relative timestamps on cards. (token safety + mediums/low)
 - Verified: assembleDebug green after every batch.
 
-### Remaining review items (not yet done)
-- #6 bottom-nav removal (High, STRUCTURAL — needs owner sign-off before removing nav).
-- Note-card density (icon-only sync, cap tags), filter-row overflow, folder cards-in-cards.
-- DB export share sheet; markdown italic-vs-bold regex bug + highlight caching (perf).
+- DONE Phase 5: removed bottom nav (Settings = pushed screen w/ back arrow);
+  fixed markdown italic-vs-bold regex; remember()+cache MarkdownVisualTransformation. (#6, md perf)
+- DONE Phase 6: DB export share sheet via FileProvider + ACTION_SEND. (md export)
+- DONE Phase 7: scrollable sort/view row (no overflow) + "/" folder separator. (md/low)
+
+### Remaining review items (minor polish, not yet done)
+- Note-card density (icon-only sync badge, cap tags to 2-3) — partially done.
+- Folder tree cards-in-cards visual nesting (Low).
+- Editor: show note title in app bar instead of static "Editor" (Low).
 - Then: rebuild + publish updated APK (v1.1).
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
