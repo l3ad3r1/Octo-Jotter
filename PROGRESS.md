@@ -83,10 +83,24 @@ zero compile errors. (debug.keystore is gitignored; regenerate via keytool if ab
 NEXT: on-device test pull of l3ad3r1/Dronehire-second-brain with a repo-scoped PAT;
 then decide on optional background repo sync + version/release bump.
 
+### v1.3 SHIPPED (2026-07-07) — repo sync + Settings cleanup
+- versionCode 4 / versionName 1.3; signed release published as Latest:
+  https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.3 (OctoJotter-v1.3.apk).
+- Stale v1.2 release+tag (from discarded regressed code) deleted.
+- Ships: two-way repo sync; single unified Sync Now (gists + selected repo);
+  dark-mode toggle; removed PAT how-to.
+- ⚠️ SIGNED WITH A NEW KEY (see below) — cannot update older installs in place;
+  reinstall fresh after exporting notes.
+
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
-- my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
-  to sign all future release updates; losing it blocks Play Store updates.
-- debug.keystore — standard debug key (android/android).
+- ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
+  REGENERATED a new upload key 2026-07-07: alias `upload`, store/key password
+  `octojotter`, at repo root my-upload-key.jks. Cert SHA-256:
+  640a69ce998145319cc5094da93667fc804a19d7909f80eb0a83574101f17c5f.
+  This is now THE key for all future updates — BACK IT UP. Installs signed with
+  the old key (v1.0–v1.2) require uninstall+reinstall to move to v1.3+.
+- debug.keystore — standard debug key (android/android); also regenerated
+  2026-07-07 (was likewise absent from the fresh clone).
 
 ## Notes
 - Build env: `JAVA_HOME=/c/Program Files/Android/Android Studio/jbr`, `ANDROID_HOME` already set.
