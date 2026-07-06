@@ -159,6 +159,8 @@ import androidx.compose.material.icons.filled.Title
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.platform.LocalContext
 import com.l3ad3r1.octojotter.data.local.NoteEntity
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
@@ -1868,6 +1870,8 @@ fun SaveStatusIndicator(saveStatus: SaveStatus) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
+    val context = LocalContext.current
+    val lastExportedPath by viewModel.lastExportedPath.collectAsState()
     val token by viewModel.githubToken.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
@@ -2141,7 +2145,7 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Export the entire local database (notes, drafts, and tags) to the device's internal storage as a JSON file.",
+                        text = "Export all notes, drafts, and tags as a JSON file, then share it to Drive, Downloads, or any app you choose.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2156,7 +2160,40 @@ fun SettingsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit = {}) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Export Database to JSON")
                     }
-                    
+
+                    lastExportedPath?.let { path ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val file = java.io.File(path)
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    file
+                                )
+                                val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "application/json"
+                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(
+                                    android.content.Intent.createChooser(shareIntent, "Share backup")
+                                )
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("share_backup_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Share, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Share backup file")
+                        }
+                    }
+
                     exportStatus?.let { status ->
                         Spacer(modifier = Modifier.height(12.dp))
                         Card(

@@ -87,6 +87,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val _exportStatus = MutableStateFlow<String?>(null)
     val exportStatus: StateFlow<String?> = _exportStatus.asStateFlow()
 
+    // Absolute path of the most recent export, so the UI can offer a share sheet.
+    private val _lastExportedPath = MutableStateFlow<String?>(null)
+    val lastExportedPath: StateFlow<String?> = _lastExportedPath.asStateFlow()
+
     fun exportDatabase() {
         viewModelScope.launch {
             _exportStatus.value = "Exporting..."
@@ -105,12 +109,16 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 val adapter = moshi.adapter(com.l3ad3r1.octojotter.data.local.DatabaseBackup::class.java)
                 val jsonString = adapter.toJson(backup)
                 
-                val filename = "gist_notes_backup_${System.currentTimeMillis()}.json"
-                val file = java.io.File(getApplication<Application>().filesDir, filename)
+                // Write to a shareable subdirectory exposed via FileProvider.
+                val exportsDir = java.io.File(getApplication<Application>().filesDir, "exports").apply { mkdirs() }
+                val filename = "octojotter_backup_${System.currentTimeMillis()}.json"
+                val file = java.io.File(exportsDir, filename)
                 file.writeText(jsonString)
-                
-                _exportStatus.value = "Database exported successfully to: ${file.absolutePath}"
+
+                _lastExportedPath.value = file.absolutePath
+                _exportStatus.value = "Backup ready: $filename. Tap Share to save it anywhere."
             } catch (e: Exception) {
+                _lastExportedPath.value = null
                 _exportStatus.value = "Failed to export database: ${e.message}"
             }
         }
@@ -118,6 +126,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearExportStatus() {
         _exportStatus.value = null
+        _lastExportedPath.value = null
     }
 
     // Sync States
