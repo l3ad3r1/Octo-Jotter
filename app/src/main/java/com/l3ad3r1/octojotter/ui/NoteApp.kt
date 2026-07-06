@@ -1,5 +1,7 @@
 package com.l3ad3r1.octojotter.ui
 
+import android.app.Activity
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -60,6 +62,9 @@ import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatStrikethrough
 import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.InsertLink
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.List
@@ -237,6 +242,24 @@ fun NotesListScreen(
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
     var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
+
+    // On the home list: back closes an open drawer; otherwise require a second
+    // back press within 2s to exit, with a toast confirming the first press.
+    val context = LocalContext.current
+    var lastBackPressTime by remember { mutableStateOf(0L) }
+    BackHandler {
+        if (drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastBackPressTime < 2000L) {
+                (context as? Activity)?.finish()
+            } else {
+                lastBackPressTime = now
+                Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // Swipe-to-delete with a non-destructive Undo window: the note is hidden
     // immediately and only permanently deleted if the Snackbar times out.
@@ -815,79 +838,77 @@ fun NotesListScreen(
                     val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
 
                     if (isFolderTreeView) {
-                        val groupedNotes = remember(notes) {
-                            notes.groupBy { note ->
-                                if (note.folderPath.isEmpty()) "Root Notes" else note.folderPath.joinToString(" / ")
+                        // True nested folder tree: build a hierarchy from each
+                        // note's folderPath, then flatten to rows that respect the
+                        // per-folder expand/collapse state.
+                        val folderTree = remember(notes) { buildFolderTree(notes) }
+                        val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
+                        val treeRows = remember(folderTree, expandedStates.toMap()) {
+                            mutableListOf<FolderTreeRow>().also {
+                                flattenFolderTree(folderTree, 0, expandedStates, it)
                             }
                         }
-                        val expandedStates = remember { mutableStateMapOf<String, Boolean>() }
 
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            groupedNotes.forEach { (folderName, folderNotes) ->
-                                val isExpanded = expandedStates[folderName] ?: true
-                                item(key = "folder_group_$folderName") {
-                                    // Flat section (not a card) so the note cards inside
-                                    // stand alone instead of being cards-within-a-card.
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .testTag("folder_accordion_$folderName")
-                                    ) {
+                            items(
+                                treeRows,
+                                key = { row ->
+                                    when (row) {
+                                        is FolderRow -> "folder_${row.node.path}"
+                                        is NoteRow -> "note_${row.note.id}"
+                                    }
+                                }
+                            ) { row ->
+                                when (row) {
+                                    is FolderRow -> {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = (row.depth * 16).dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f))
+                                                .clickable { expandedStates[row.node.path] = !row.expanded }
+                                                .padding(12.dp)
+                                                .testTag("folder_node_${row.node.path}"),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f))
-                                                    .clickable { expandedStates[folderName] = !isExpanded }
-                                                    .padding(12.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Folder,
-                                                        contentDescription = "Folder",
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
-                                                    Text(
-                                                        text = folderName,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                                    )
-                                                    Badge(
-                                                        containerColor = MaterialTheme.colorScheme.primary,
-                                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                                    ) {
-                                                        Text("${folderNotes.size}")
-                                                    }
-                                                }
                                                 Icon(
-                                                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                    contentDescription = if (isExpanded) "Collapse" else "Expand"
+                                                    imageVector = if (row.expanded) Icons.Default.FolderOpen else Icons.Default.Folder,
+                                                    contentDescription = "Folder",
+                                                    tint = MaterialTheme.colorScheme.primary
                                                 )
-                                            }
-
-                                            AnimatedVisibility(visible = isExpanded) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(8.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                Text(
+                                                    text = row.node.name,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                )
+                                                Badge(
+                                                    containerColor = MaterialTheme.colorScheme.primary,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimary
                                                 ) {
-                                                    folderNotes.forEach { note ->
-                                                        renderNoteCard(note)
-                                                    }
+                                                    Text("${row.node.noteCount}")
                                                 }
                                             }
+                                            Icon(
+                                                imageVector = if (row.expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                contentDescription = if (row.expanded) "Collapse" else "Expand"
+                                            )
+                                        }
+                                    }
+                                    is NoteRow -> {
+                                        Box(modifier = Modifier.padding(start = (row.depth * 16).dp)) {
+                                            renderNoteCard(row.note)
+                                        }
                                     }
                                 }
                             }
@@ -973,6 +994,57 @@ fun NotesListScreen(
         )
     }
 }
+}
+
+// ---- Nested folder tree model (drives the "Grouped" view) ----
+
+// A node in the notes folder hierarchy, built from each note's folderPath.
+private class FolderTreeNode(val name: String, val path: String) {
+    val children = LinkedHashMap<String, FolderTreeNode>()
+    val notes = mutableListOf<NoteEntity>()
+    var noteCount: Int = 0   // recursive count, including descendant folders
+}
+
+// Flattened rows for rendering the tree in a LazyColumn.
+private sealed interface FolderTreeRow { val depth: Int }
+private data class FolderRow(val node: FolderTreeNode, override val depth: Int, val expanded: Boolean) : FolderTreeRow
+private data class NoteRow(val note: NoteEntity, override val depth: Int) : FolderTreeRow
+
+private fun buildFolderTree(notes: List<NoteEntity>): FolderTreeNode {
+    val root = FolderTreeNode("", "")
+    for (note in notes) {
+        var cur = root
+        val acc = StringBuilder()
+        for (seg in note.folderPath) {
+            if (acc.isNotEmpty()) acc.append("/")
+            acc.append(seg)
+            cur = cur.children.getOrPut(seg) { FolderTreeNode(seg, acc.toString()) }
+        }
+        cur.notes.add(note)
+    }
+    fun count(node: FolderTreeNode): Int {
+        var c = node.notes.size
+        for (child in node.children.values) c += count(child)
+        node.noteCount = c
+        return c
+    }
+    count(root)
+    return root
+}
+
+// Depth-first flatten: child folders (alphabetical) first, then this node's notes.
+private fun flattenFolderTree(
+    node: FolderTreeNode,
+    depth: Int,
+    expanded: Map<String, Boolean>,
+    out: MutableList<FolderTreeRow>
+) {
+    for (child in node.children.values.sortedBy { it.name.lowercase() }) {
+        val isExpanded = expanded[child.path] ?: false
+        out.add(FolderRow(child, depth, isExpanded))
+        if (isExpanded) flattenFolderTree(child, depth + 1, expanded, out)
+    }
+    for (note in node.notes) out.add(NoteRow(note, depth))
 }
 
 @Composable
@@ -1093,7 +1165,14 @@ fun EditorScreen(
         val end = selection.end
 
         val selectedText = text.substring(start, end)
-        val actualSuffix = if (suffix.isEmpty() && syntax != "- ") syntax else suffix
+        // A trailing space marks a line prefix (headings, lists, quotes, tasks) —
+        // those get no closing token. Wrap tokens (**, *, ~~, `) mirror themselves.
+        val isLinePrefix = syntax.endsWith(" ")
+        val actualSuffix = when {
+            suffix.isNotEmpty() -> suffix
+            isLinePrefix -> ""
+            else -> syntax
+        }
         val newText = text.substring(0, start) + syntax + selectedText + actualSuffix + text.substring(end)
         
         val newSelectionStart = if (start == end) {
@@ -1324,12 +1403,26 @@ fun EditorScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Heading
+                        // Heading 1
                         IconButton(
                             onClick = { insertMarkdown("# ", "") },
                             modifier = Modifier.testTag("format_heading_button")
                         ) {
-                            Icon(Icons.Default.Title, contentDescription = "Heading")
+                            Icon(Icons.Default.Title, contentDescription = "Heading 1")
+                        }
+                        // Heading 2
+                        IconButton(
+                            onClick = { insertMarkdown("## ", "") },
+                            modifier = Modifier.testTag("format_heading2_button")
+                        ) {
+                            Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                        }
+                        // Heading 3
+                        IconButton(
+                            onClick = { insertMarkdown("### ", "") },
+                            modifier = Modifier.testTag("format_heading3_button")
+                        ) {
+                            Text("H3", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                         }
                         // Bold
                         IconButton(
@@ -1366,12 +1459,33 @@ fun EditorScreen(
                         ) {
                             Icon(Icons.Default.FormatListBulleted, contentDescription = "Format Unordered List")
                         }
+                        // Numbered list
+                        IconButton(
+                            onClick = { insertMarkdown("1. ", "") },
+                            modifier = Modifier.testTag("format_numbered_list_button")
+                        ) {
+                            Icon(Icons.Default.FormatListNumbered, contentDescription = "Format Numbered List")
+                        }
+                        // Blockquote
+                        IconButton(
+                            onClick = { insertMarkdown("> ", "") },
+                            modifier = Modifier.testTag("format_quote_button")
+                        ) {
+                            Icon(Icons.Default.FormatQuote, contentDescription = "Blockquote")
+                        }
                         // Task checkbox
                         IconButton(
                             onClick = { insertMarkdown("- [ ] ", "") },
                             modifier = Modifier.testTag("format_checkbox_button")
                         ) {
                             Icon(Icons.Default.CheckBox, contentDescription = "Task checkbox")
+                        }
+                        // Markdown link
+                        IconButton(
+                            onClick = { insertMarkdown("[", "](url)") },
+                            modifier = Modifier.testTag("format_link_button")
+                        ) {
+                            Icon(Icons.Default.InsertLink, contentDescription = "Link")
                         }
                         // Wiki link
                         IconButton(
