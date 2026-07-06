@@ -35,6 +35,16 @@
       "type": "snippet",
       "version": "1.0.0",
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/md-snippets/manifest.json"
+    },
+    {
+      "id": "note-actions",
+      "name": "Note Actions",
+      "author": "l3ad3r1",
+      "description": "Create new notes from the editor: duplicate the note, or split its tasks out.",
+      "type": "script",
+      "version": "1.0.0",
+      "permissions": ["notes:write"],
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/note-actions/manifest.json"
     }
   ]
 }

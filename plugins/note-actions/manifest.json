@@ -1,0 +1,11 @@
+{
+  "id": "note-actions",
+  "name": "Note Actions",
+  "version": "1.0.0",
+  "minAppVersion": "1.8",
+  "author": "l3ad3r1",
+  "description": "Editor commands that create new notes: duplicate the note, or split its tasks into a separate note.",
+  "type": "script",
+  "permissions": ["notes:write"],
+  "main": "octo.registerCommand(\"dup\", \"Duplicate as new note\", function(t){ octo.notes.create(\"Copy of note\", String(t)); return t; });\nocto.registerCommand(\"tasks\", \"Send tasks to new note\", function(t){ var lines = String(t).split(\"\\n\"); var tasks = []; for (var i = 0; i < lines.length; i++) { if (/^\\s*- \\[ \\]/.test(lines[i])) tasks.push(lines[i]); } if (tasks.length > 0) { octo.notes.create(\"Tasks\", tasks.join(\"\\n\")); } return t; });"
+}
