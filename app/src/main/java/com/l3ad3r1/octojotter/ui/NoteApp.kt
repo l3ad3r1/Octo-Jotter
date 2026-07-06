@@ -749,16 +749,16 @@ fun NotesListScreen(
                                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                                                 modifier = Modifier.size(14.dp)
                                             )
-                                            note.tags.take(4).forEach { tag ->
+                                            note.tags.take(3).forEach { tag ->
                                                 SuggestionChip(
                                                     onClick = { viewModel.selectTag(tag) },
                                                     label = { Text(tag, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)) },
                                                     modifier = Modifier.height(24.dp).testTag("note_card_tag_${note.id}_$tag")
                                                 )
                                             }
-                                            if (note.tags.size > 4) {
+                                            if (note.tags.size > 3) {
                                                 Text(
-                                                    text = "+${note.tags.size - 4}",
+                                                    text = "+${note.tags.size - 3}",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -827,19 +827,19 @@ fun NotesListScreen(
                             groupedNotes.forEach { (folderName, folderNotes) ->
                                 val isExpanded = expandedStates[folderName] ?: true
                                 item(key = "folder_group_$folderName") {
-                                    Card(
+                                    // Flat section (not a card) so the note cards inside
+                                    // stand alone instead of being cards-within-a-card.
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(vertical = 4.dp)
-                                            .testTag("folder_accordion_$folderName"),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
-                                        )
+                                            .testTag("folder_accordion_$folderName")
                                     ) {
-                                        Column {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f))
                                                     .clickable { expandedStates[folderName] = !isExpanded }
                                                     .padding(12.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -885,7 +885,6 @@ fun NotesListScreen(
                                                     }
                                                 }
                                             }
-                                        }
                                     }
                                 }
                             }
@@ -977,29 +976,24 @@ fun NotesListScreen(
 fun SyncStatusBadge(note: NoteEntity) {
     val status = MaterialTheme.octoStatus
     val (text, color, icon) = when {
-        note.needsSync -> Triple("Pending Sync", status.syncPending, Icons.Default.CloudQueue)
+        note.needsSync -> Triple("Pending sync", status.syncPending, Icons.Default.CloudQueue)
         !note.gistId.isNullOrEmpty() -> Triple("Synced", status.syncOk, Icons.Default.CloudDone)
-        else -> Triple("Local Only", status.localOnly, Icons.Default.CloudOff)
+        else -> Triple("Local only", status.localOnly, Icons.Default.CloudOff)
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    // Icon-only at list level (the label repeated on every card was noise);
+    // the state is still announced to screen readers via contentDescription.
+    Box(
+        contentAlignment = Alignment.Center,
         modifier = Modifier
-            .background(color.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(color.copy(alpha = 0.14f), CircleShape)
+            .padding(4.dp)
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = text,
             tint = color,
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontWeight = FontWeight.Medium
+            modifier = Modifier.size(16.dp)
         )
     }
 }
@@ -1271,9 +1265,12 @@ fun EditorScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Editor",
+                            text = editorTitle.ifBlank { "Untitled Note" },
                             fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         SaveStatusIndicator(saveStatus = saveStatus)
