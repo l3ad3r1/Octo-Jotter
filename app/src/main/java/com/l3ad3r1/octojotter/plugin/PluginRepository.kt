@@ -35,6 +35,10 @@ class PluginRepository(private val pluginDao: PluginDao) {
     val enabledThemePlugin: Flow<PluginEntity?> =
         pluginDao.getEnabledByTypeFlow(PluginTypes.THEME).map { it.firstOrNull() }
 
+    // All enabled script plugins (each may register editor commands).
+    val enabledScriptPlugins: Flow<List<PluginEntity>> =
+        pluginDao.getEnabledByTypeFlow(PluginTypes.SCRIPT)
+
     /** Fetch the community registry index. */
     suspend fun fetchRegistry(url: String = DEFAULT_REGISTRY_URL): Result<List<RegistryEntry>> =
         withContext(Dispatchers.IO) {

@@ -1100,6 +1100,8 @@ fun EditorScreen(
     val saveStatus by viewModel.saveStatus.collectAsState()
     val pendingDraft by viewModel.pendingDraft.collectAsState()
     val availableFolders by viewModel.allFolders.collectAsState()
+    val pluginCommands by viewModel.pluginCommands.collectAsState()
+    var showPluginMenu by remember { mutableStateOf(false) }
 
     val handleExit = {
         viewModel.clearDraftForCurrentNote()
@@ -1502,6 +1504,41 @@ fun EditorScreen(
                             modifier = Modifier.testTag("format_wikilink_button")
                         ) {
                             Icon(Icons.Default.Link, contentDescription = "Wiki link")
+                        }
+                        // Plugin commands (only shown when script plugins register any)
+                        if (pluginCommands.isNotEmpty()) {
+                            Box {
+                                IconButton(
+                                    onClick = { showPluginMenu = true },
+                                    modifier = Modifier.testTag("plugin_commands_button")
+                                ) {
+                                    Icon(Icons.Default.Extension, contentDescription = "Plugin commands")
+                                }
+                                DropdownMenu(
+                                    expanded = showPluginMenu,
+                                    onDismissRequest = { showPluginMenu = false }
+                                ) {
+                                    pluginCommands.forEach { cmd ->
+                                        DropdownMenuItem(
+                                            text = { Text(cmd.name) },
+                                            onClick = {
+                                                showPluginMenu = false
+                                                scope.launch {
+                                                    val out = viewModel.runPluginCommand(cmd, textFieldValue.text)
+                                                    if (out != null) {
+                                                        textFieldValue = TextFieldValue(
+                                                            text = out,
+                                                            selection = androidx.compose.ui.text.TextRange(out.length)
+                                                        )
+                                                        viewModel.onNoteTextChanged(editorTitle, out)
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.testTag("plugin_command_${cmd.pluginId}_${cmd.id}")
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

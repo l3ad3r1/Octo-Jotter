@@ -41,7 +41,11 @@ data class PluginManifest(
     @Json(name = "type") val type: String = "theme",
     @Json(name = "permissions") val permissions: List<String> = emptyList(),
     // Present when type == "theme".
-    @Json(name = "theme") val theme: ThemeSpec? = null
+    @Json(name = "theme") val theme: ThemeSpec? = null,
+    // Present when type == "script": inline JavaScript source. `scriptUrl` is
+    // reserved for fetching the script from a separate file (not yet used).
+    @Json(name = "main") val main: String? = null,
+    @Json(name = "scriptUrl") val scriptUrl: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -54,4 +58,5 @@ data class ThemeSpec(
 
 object PluginTypes {
     const val THEME = "theme"
+    const val SCRIPT = "script"
 }

@@ -112,6 +112,9 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+  // Mozilla Rhino: pure-JVM JS engine for the community-plugin scripting runtime
+  // (runs interpreted/sandboxed on Android — no native code).
+  implementation("org.mozilla:rhino:1.7.14")
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

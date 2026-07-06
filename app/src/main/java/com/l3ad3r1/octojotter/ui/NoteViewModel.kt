@@ -197,6 +197,38 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearPluginMessage() { _pluginMessage.value = null }
 
+    // ---- Script plugins (phase 2): sandboxed JS commands ----
+    private val scriptEngine = com.l3ad3r1.octojotter.plugin.ScriptEngine()
+    private val _pluginCommands =
+        MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor>>(emptyList())
+    val pluginCommands: StateFlow<List<com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor>> =
+        _pluginCommands.asStateFlow()
+
+    init {
+        // Reload the sandbox whenever the set of enabled script plugins changes.
+        viewModelScope.launch {
+            pluginRepository.enabledScriptPlugins.collect { list ->
+                val scripts = list.mapNotNull { entity ->
+                    pluginRepository.parseManifest(entity)?.main?.let { entity.id to it }
+                }.toMap()
+                scriptEngine.reload(scripts)
+                _pluginCommands.value = scriptEngine.commands()
+            }
+        }
+    }
+
+    /** Run a plugin command on [input], returning transformed text (or null on error). */
+    suspend fun runPluginCommand(
+        descriptor: com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor,
+        input: String
+    ): String? {
+        val result = scriptEngine.run(descriptor.pluginId, descriptor.id, input)
+        return result.getOrElse {
+            _pluginMessage.value = "Plugin command failed: ${it.message}"
+            null
+        }
+    }
+
     // DB Backup export preferences/status
     private val _exportStatus = MutableStateFlow<String?>(null)
     val exportStatus: StateFlow<String?> = _exportStatus.asStateFlow()
