@@ -55,9 +55,15 @@ v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
 - To pull repos we'd need a NEW feature: GitHub Contents/Trees API + repo-picker UI
   + folder mapping + PAT `repo` scope. Awaiting owner decision on scope.
 
-### When publishing v1.1
-- Bump versionCode 1->2 and versionName "1.0"->"1.1" in app/build.gradle.kts so the
-  updater and installers see the new version.
+### v1.1 SHIPPED (2026-07-06)
+- versionCode 2 / versionName 1.1; signed release APK published:
+  https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.1
+- In-app updater verified: installed v1.0 now sees v1.1; shipped v1.1 reports up-to-date.
+
+### Deferred: full two-way repo sync (owner approved, NOT yet started)
+Plan when resumed: NoteEntity repo fields (+DB v7) / RepoPreferences DataStore /
+GithubApiService trees+blobs+contents PUT / NoteRepository pull+push per repo /
+Settings repo-picker UI. PAT needs `repo` scope. No code written yet.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - my-upload-key.jks — alias `upload`, store/key password `octojotter`. Required
