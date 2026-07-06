@@ -73,3 +73,15 @@ object PluginTypes {
     const val SCRIPT = "script"
     const val SNIPPET = "snippet"
 }
+
+/** Known plugin permissions and their human-readable descriptions. */
+object PluginPermissions {
+    const val NOTES_READ = "notes:read"
+    const val NOTES_WRITE = "notes:write"
+
+    fun describe(permission: String): String = when (permission) {
+        NOTES_READ -> "Read the titles of your notes"
+        NOTES_WRITE -> "Create new notes"
+        else -> permission
+    }
+}

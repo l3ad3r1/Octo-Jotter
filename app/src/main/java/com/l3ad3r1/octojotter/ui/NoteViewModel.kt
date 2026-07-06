@@ -197,8 +197,32 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearPluginMessage() { _pluginMessage.value = null }
 
-    // ---- Script plugins (phase 2): sandboxed JS commands ----
-    private val scriptEngine = com.l3ad3r1.octojotter.plugin.ScriptEngine()
+    // ---- Script plugins (phase 2/4): sandboxed JS commands + gated APIs ----
+    // Bridge the sandbox uses to affect the app; every capability is permission-gated
+    // by ScriptEngine before it calls through here.
+    private val pluginHost = object : com.l3ad3r1.octojotter.plugin.PluginHost {
+        override fun createNote(title: String, content: String) {
+            kotlinx.coroutines.runBlocking {
+                repository.insertNote(
+                    com.l3ad3r1.octojotter.data.local.NoteEntity(
+                        title = title.ifBlank { "Untitled" },
+                        content = content,
+                        needsSync = true,
+                        lastModifiedLocally = System.currentTimeMillis()
+                    )
+                )
+            }
+            _pluginMessage.value = "Plugin created note: ${title.ifBlank { "Untitled" }}"
+        }
+
+        override fun listNoteTitles(): List<String> =
+            kotlinx.coroutines.runBlocking { repository.getAllNotes().map { it.title } }
+
+        override fun log(pluginId: String, message: String) {
+            android.util.Log.i("OctoPlugin/$pluginId", message)
+        }
+    }
+    private val scriptEngine = com.l3ad3r1.octojotter.plugin.ScriptEngine(pluginHost)
     private val _pluginCommands =
         MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor>>(emptyList())
     val pluginCommands: StateFlow<List<com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor>> =
@@ -208,10 +232,16 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         // Reload the sandbox whenever the set of enabled script plugins changes.
         viewModelScope.launch {
             pluginRepository.enabledScriptPlugins.collect { list ->
-                val scripts = list.mapNotNull { entity ->
-                    pluginRepository.parseManifest(entity)?.main?.let { entity.id to it }
-                }.toMap()
-                scriptEngine.reload(scripts)
+                val specs = list.mapNotNull { entity ->
+                    pluginRepository.parseManifest(entity)?.main?.let { src ->
+                        com.l3ad3r1.octojotter.plugin.ScriptEngine.PluginSpec(
+                            id = entity.id,
+                            source = src,
+                            permissions = entity.permissions.toSet()
+                        )
+                    }
+                }
+                scriptEngine.reload(specs)
                 _pluginCommands.value = scriptEngine.commands()
             }
         }

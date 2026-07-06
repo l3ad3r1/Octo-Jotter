@@ -81,7 +81,10 @@ fun CommunityPluginsScreen(viewModel: NoteViewModel, onNavigateBack: () -> Unit 
                     Text("This plugin requests permission to:")
                     Spacer(Modifier.height(8.dp))
                     entry.permissions.forEach { perm ->
-                        Text("•  $perm", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "•  ${com.l3ad3r1.octojotter.plugin.PluginPermissions.describe(perm)}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             },

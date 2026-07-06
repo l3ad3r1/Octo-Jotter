@@ -30,9 +30,12 @@ import org.mozilla.javascript.Undefined
  * text. All Rhino access is confined to a single dispatcher via [mutex], and a
  * plugin's top-level scope is kept alive so its command functions stay callable.
  */
-class ScriptEngine {
+class ScriptEngine(private val host: PluginHost? = null) {
 
     data class CommandDescriptor(val pluginId: String, val id: String, val name: String)
+
+    /** A plugin to load: its id, JS source, and the permissions the user granted. */
+    data class PluginSpec(val id: String, val source: String, val permissions: Set<String>)
 
     private class Command(val descriptor: CommandDescriptor, val fn: Function)
     private class LoadedPlugin(val scope: Scriptable, val commands: MutableList<Command> = mutableListOf())
@@ -41,19 +44,19 @@ class ScriptEngine {
     private val plugins = LinkedHashMap<String, LoadedPlugin>()
     private val factory = SandboxContextFactory()
 
-    /** Replace all loaded plugins with [scripts] (pluginId -> JS source). */
-    suspend fun reload(scripts: Map<String, String>) = withContext(Dispatchers.Default) {
+    /** Replace all loaded plugins with [specs]. */
+    suspend fun reload(specs: List<PluginSpec>) = withContext(Dispatchers.Default) {
         mutex.withLock {
             plugins.clear()
-            for ((pluginId, source) in scripts) {
+            for (spec in specs) {
                 try {
                     val cx = factory.enterContext()
                     try {
                         val scope = cx.initSafeStandardObjects(null, true)
                         val loaded = LoadedPlugin(scope)
-                        installApi(cx, scope, pluginId, loaded)
-                        cx.evaluateString(scope, source, pluginId, 1, null)
-                        plugins[pluginId] = loaded
+                        installApi(cx, scope, spec.id, spec.permissions, loaded)
+                        cx.evaluateString(scope, spec.source, spec.id, 1, null)
+                        plugins[spec.id] = loaded
                     } finally {
                         Context.exit()
                     }
@@ -91,9 +94,17 @@ class ScriptEngine {
             }
         }
 
-    private fun installApi(cx: Context, scope: Scriptable, pluginId: String, loaded: LoadedPlugin) {
+    private fun installApi(
+        cx: Context,
+        scope: Scriptable,
+        pluginId: String,
+        permissions: Set<String>,
+        loaded: LoadedPlugin
+    ) {
         val octo = cx.newObject(scope)
-        val registerCommand = object : BaseFunction() {
+
+        // octo.registerCommand(id, name, fn) — no permission needed.
+        ScriptableObject.putProperty(octo, "registerCommand", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
                 val id = args?.getOrNull(0)?.let { Context.toString(it) } ?: return Undefined.instance
                 val name = args.getOrNull(1)?.let { Context.toString(it) } ?: id
@@ -101,9 +112,45 @@ class ScriptEngine {
                 loaded.commands.add(Command(CommandDescriptor(pluginId, id, name), fn))
                 return Undefined.instance
             }
-        }
-        ScriptableObject.putProperty(octo, "registerCommand", registerCommand)
+        })
+
+        // octo.log(message) — no permission needed.
+        ScriptableObject.putProperty(octo, "log", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                host?.log(pluginId, args?.getOrNull(0)?.let { Context.toString(it) } ?: "")
+                return Undefined.instance
+            }
+        })
+
+        // octo.notes.{create,list} — permission-gated.
+        val notes = cx.newObject(scope)
+        ScriptableObject.putProperty(notes, "create", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_WRITE)
+                val title = args?.getOrNull(0)?.let { Context.toString(it) } ?: ""
+                val content = args?.getOrNull(1)?.let { Context.toString(it) } ?: ""
+                host?.createNote(title, content)
+                return Undefined.instance
+            }
+        })
+        ScriptableObject.putProperty(notes, "list", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_READ)
+                val titles = host?.listNoteTitles() ?: emptyList()
+                return cx.newArray(scope, titles.toTypedArray())
+            }
+        })
+        ScriptableObject.putProperty(octo, "notes", notes)
+
         ScriptableObject.putProperty(scope, "octo", octo)
+    }
+
+    // Throws a JS-catchable error (surfaced to the user) when a plugin calls an
+    // API it wasn't granted permission for.
+    private fun requirePermission(granted: Set<String>, permission: String) {
+        if (permission !in granted) {
+            throw IllegalStateException("Permission denied: '$permission' was not granted to this plugin.")
+        }
     }
 
     /** Denies Java-class access and enforces the per-run instruction budget. */
