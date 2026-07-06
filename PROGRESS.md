@@ -102,6 +102,22 @@ then decide on optional background repo sync + version/release bump.
   mirroring (trailing-space = line prefix, no suffix).
 - Home: double-back-to-exit with toast (first back closes drawer).
 
+### Community plugins — FOUNDATION built (2026-07-07), NOT yet released
+Decision: **phased hybrid**. Build the platform once; phase 1 = declarative
+plugins (themes), phase 2 (later) = QuickJS scripting runtime + permission model.
+Registry lives IN this repo: plugins/registry.json + plugins/<id>/manifest.json,
+fetched via raw.githubusercontent (public, no token). Built so far:
+- plugin/PluginModels (manifest+registry), PluginRepository (fetch/install/enable/
+  uninstall; one active theme), data/local PluginEntity+PluginDao, DB v8 MIGRATION_7_8.
+- Theme engine: ThemeSpec→ColorScheme (ui/theme/PluginTheme.kt); MyApplicationTheme
+  gained overrideColorScheme; MainActivity applies the enabled theme plugin.
+- NoteViewModel plugin state/actions; ui/CommunityPluginsScreen (Browse/Installed);
+  Settings → Community Plugins card + "plugins" nav route.
+- Sample plugins live: Ocean Dark, Rose Light (theme type). Verified assembleDebug.
+NOTE: minAppVersion in manifests is metadata only (not yet enforced on install).
+NEXT (phase 2): QuickJS runtime + OctoJotterApi (commands/toolbar/md-processors),
+per-plugin permissions, plugin updates, richer plugin types (snippets/templates).
+
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
   REGENERATED a new upload key 2026-07-07: alias `upload`, store/key password
