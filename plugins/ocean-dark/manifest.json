@@ -1,0 +1,34 @@
+{
+  "id": "ocean-dark",
+  "name": "Ocean Dark",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "A deep-blue dark theme with aqua accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#4FC3F7",
+      "onPrimary": "#00344A",
+      "primaryContainer": "#14405A",
+      "onPrimaryContainer": "#CDE8FA",
+      "secondary": "#80CBC4",
+      "onSecondary": "#003733",
+      "secondaryContainer": "#1E4B47",
+      "onSecondaryContainer": "#CFECE8",
+      "background": "#0B1E2A",
+      "onBackground": "#DCEAF5",
+      "surface": "#0E2431",
+      "onSurface": "#DCEAF5",
+      "surfaceVariant": "#1B3443",
+      "onSurfaceVariant": "#B4C7D4",
+      "surfaceContainer": "#122C3B",
+      "error": "#FF8A80",
+      "onError": "#4A0400",
+      "outline": "#5E7686",
+      "outlineVariant": "#2C4657"
+    }
+  }
+}

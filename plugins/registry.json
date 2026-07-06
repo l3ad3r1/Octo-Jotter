@@ -1,0 +1,22 @@
+{
+  "plugins": [
+    {
+      "id": "ocean-dark",
+      "name": "Ocean Dark",
+      "author": "l3ad3r1",
+      "description": "A deep-blue dark theme with aqua accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/ocean-dark/manifest.json"
+    },
+    {
+      "id": "rose-light",
+      "name": "Rose Light",
+      "author": "l3ad3r1",
+      "description": "A warm light theme with rose accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/rose-light/manifest.json"
+    }
+  ]
+}
