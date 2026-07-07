@@ -19,6 +19,15 @@
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/rose-light/manifest.json"
     },
     {
+      "id": "midnight",
+      "name": "Midnight",
+      "author": "l3ad3r1",
+      "description": "A near-black midnight theme with soft periwinkle and moonlit indigo accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/midnight/manifest.json"
+    },
+    {
       "id": "text-tools",
       "name": "Text Tools",
       "author": "l3ad3r1",
