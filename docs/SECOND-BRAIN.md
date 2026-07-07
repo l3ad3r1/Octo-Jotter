@@ -53,10 +53,10 @@ Install these from **Settings -> Community Plugins**.
 | Obsidian plugin | Octo Jotter equivalent | Status |
 |-----------------|------------------------|--------|
 | Templater | Second Brain Templates + Second Brain Tools | Available |
-| Tasks | Open Tasks Dashboard, Second Brain Tools, Sort Tasks, native checkboxes | Available |
+| Tasks | Task Board, Open Tasks Dashboard, Second Brain Tools, Sort Tasks, native checkboxes | Available |
 | Table of contents | Table of Contents script | Available |
 | Dataview | `notes:read` script API: note bodies, tags, folders, timestamps, search, tag filters, open tasks | Available in v2.2+ |
-| Kanban | Board view is an app feature on the roadmap | Roadmap |
+| Kanban | Task Board groups open/done Markdown tasks across notes | Available in v2.3+ |
 | Excalidraw | Freeform canvas is an app feature on the roadmap | Roadmap |
 
 ### Templates
@@ -71,6 +71,8 @@ date and scaffolds Focus, Tasks, Log, and Captures sections.
 ### Tasks
 
 - Write tasks as `- [ ]` / `- [x]`; they render as checkboxes in preview.
+- Task Board gives you an in-app board over open and completed tasks across
+  unlocked notes, with one-tap checkbox updates back to the source note.
 - Open Tasks Dashboard scans readable notes and generates a cross-note task
   dashboard with source note links and line numbers.
 - Extract open tasks to top surfaces everything still open inside one note.
@@ -105,7 +107,8 @@ is redacted from plugins.
    Contents, Sort Tasks, and Open Tasks Dashboard.
 3. Pick a theme: Midnight or Emerald for focus, Daybreak for daytime.
 4. Each morning: create a daily note, work the day, then sort tasks.
-5. Weekly: insert the Weekly Review template and reflect.
+5. Open Task Board from the drawer to review and close loops.
+6. Weekly: insert the Weekly Review template and reflect.
 
 ---
 
@@ -113,7 +116,6 @@ is redacted from plugins.
 
 These need app-level support beyond the current plugin API:
 
-- Kanban board view over a project's tasks.
 - Excalidraw-style canvas for diagrams embedded in notes.
 - Saved query dashboards built from the v2.2 read-only script API.
 

@@ -243,6 +243,9 @@ fun NoteApp(viewModel: NoteViewModel) {
                 },
                 onNavigateToTrash = {
                     navController.navigate("trash") { launchSingleTop = true }
+                },
+                onNavigateToTaskBoard = {
+                    navController.navigate("task_board") { launchSingleTop = true }
                 }
             )
         }
@@ -283,6 +286,13 @@ fun NoteApp(viewModel: NoteViewModel) {
             TrashScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("task_board") {
+            TaskBoardScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEditor = { noteId -> navController.navigate("editor/$noteId") }
             )
         }
         composable("sync_health") {
@@ -416,7 +426,8 @@ fun NotesListScreen(
     viewModel: NoteViewModel,
     onNavigateToEditor: (Int) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToTrash: () -> Unit
+    onNavigateToTrash: () -> Unit,
+    onNavigateToTaskBoard: () -> Unit
 ) {
     val notes by viewModel.filteredNotes.collectAsState()
     val selectedTag by viewModel.selectedTag.collectAsState()
@@ -544,6 +555,17 @@ fun NotesListScreen(
                         onNavigateToTrash()
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_trash")
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.CheckBox, contentDescription = null) },
+                    label = { Text("Task Board") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onNavigateToTaskBoard()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_task_board")
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -1502,6 +1524,268 @@ private fun flattenFolderTree(
         if (isExpanded) flattenFolderTree(child, depth + 1, expanded, out)
     }
     for (note in node.notes) out.add(NoteRow(note, depth))
+}
+
+private data class TaskBoardItem(
+    val noteId: Int,
+    val noteTitle: String,
+    val folder: String?,
+    val text: String,
+    val lineNumber: Int,
+    val checked: Boolean,
+    val tags: List<String>,
+    val lastModifiedLocally: Long
+)
+
+private val TASK_BOARD_LINE_REGEX = Regex("""^\s*[-*]\s+\[([ xX])]\s+(.*)$""")
+
+private fun parseTaskBoardItems(notes: List<NoteEntity>): List<TaskBoardItem> {
+    return notes
+        .filter { !it.locked && it.deletedAt == null }
+        .flatMap { note ->
+            note.content.lines().mapIndexedNotNull { index, line ->
+                val match = TASK_BOARD_LINE_REGEX.matchEntire(line) ?: return@mapIndexedNotNull null
+                TaskBoardItem(
+                    noteId = note.id,
+                    noteTitle = note.displayTitle.ifBlank { note.title.ifBlank { "Untitled Note" } },
+                    folder = note.folder ?: note.folderPath.joinToString("/").ifBlank { null },
+                    text = match.groupValues[2].trim(),
+                    lineNumber = index + 1,
+                    checked = match.groupValues[1].equals("x", ignoreCase = true),
+                    tags = note.tags,
+                    lastModifiedLocally = note.lastModifiedLocally
+                )
+            }
+        }
+        .sortedWith(compareBy<TaskBoardItem> { it.checked }.thenByDescending { it.lastModifiedLocally })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TaskBoardScreen(
+    viewModel: NoteViewModel,
+    onNavigateBack: () -> Unit,
+    onNavigateToEditor: (Int) -> Unit
+) {
+    val notes by viewModel.allNotesForFolders.collectAsState()
+    val tasks = remember(notes) { parseTaskBoardItems(notes) }
+    val openTasks = tasks.filterNot { it.checked }
+    val doneTasks = tasks.filter { it.checked }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Task Board", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text("${openTasks.size} open") },
+                    icon = { Icon(Icons.Default.CheckBoxOutlineBlank, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                )
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text("${doneTasks.size} done") },
+                    icon = { Icon(Icons.Default.CheckBox, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                )
+            }
+
+            if (tasks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.CheckBoxOutlineBlank,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                            modifier = Modifier.size(72.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No tasks found",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Add Markdown tasks like - [ ] Follow up in any unlocked note.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        TaskBoardColumn(
+                            title = "Open",
+                            tasks = openTasks,
+                            checkedTarget = true,
+                            viewModel = viewModel,
+                            onNavigateToEditor = onNavigateToEditor,
+                            modifier = Modifier.width(320.dp)
+                        )
+                    }
+                    item {
+                        TaskBoardColumn(
+                            title = "Done",
+                            tasks = doneTasks,
+                            checkedTarget = false,
+                            viewModel = viewModel,
+                            onNavigateToEditor = onNavigateToEditor,
+                            modifier = Modifier.width(320.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskBoardColumn(
+    title: String,
+    tasks: List<TaskBoardItem>,
+    checkedTarget: Boolean,
+    viewModel: NoteViewModel,
+    onNavigateToEditor: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier.fillMaxHeight()
+    ) {
+        Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Badge { Text("${tasks.size}") }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (tasks.isEmpty()) {
+                Text(
+                    text = "Nothing here",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(8.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(tasks, key = { "${it.noteId}_${it.lineNumber}_${it.checked}" }) { task ->
+                        TaskBoardCard(
+                            task = task,
+                            checkedTarget = checkedTarget,
+                            onToggle = { viewModel.setTaskChecked(task.noteId, task.lineNumber, checkedTarget) },
+                            onOpenNote = { onNavigateToEditor(task.noteId) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskBoardCard(
+    task: TaskBoardItem,
+    checkedTarget: Boolean,
+    onToggle: () -> Unit,
+    onOpenNote: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth().testTag("task_board_card_${task.noteId}_${task.lineNumber}")
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                IconButton(
+                    onClick = onToggle,
+                    modifier = Modifier.size(36.dp).testTag("task_board_toggle_${task.noteId}_${task.lineNumber}")
+                ) {
+                    Icon(
+                        imageVector = if (task.checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
+                        contentDescription = if (checkedTarget) "Mark done" else "Mark open",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(
+                    text = task.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = task.noteTitle,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable(onClick = onOpenNote).testTag("task_board_source_${task.noteId}_${task.lineNumber}")
+            )
+            Text(
+                text = buildString {
+                    append("Line ${task.lineNumber}")
+                    task.folder?.let { append(" - ").append(it) }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (task.tags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(task.tags.take(4)) { tag ->
+                        SuggestionChip(onClick = {}, label = { Text(tag, style = MaterialTheme.typography.labelSmall) })
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

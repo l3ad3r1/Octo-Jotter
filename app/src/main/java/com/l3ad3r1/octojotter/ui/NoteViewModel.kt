@@ -820,6 +820,32 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setTaskChecked(noteId: Int, lineNumber: Int, checked: Boolean) {
+        viewModelScope.launch {
+            val note = repository.getNoteById(noteId) ?: return@launch
+            if (note.locked || lineNumber < 1) return@launch
+            val lines = note.content.lines().toMutableList()
+            val index = lineNumber - 1
+            val currentLine = lines.getOrNull(index) ?: return@launch
+            val updatedLine = when {
+                checked -> currentLine.replaceFirst(Regex("""^(\s*[-*]\s+)\[\s]"""), "$1[x]")
+                else -> currentLine.replaceFirst(Regex("""^(\s*[-*]\s+)\[[xX]]"""), "$1[ ]")
+            }
+            if (updatedLine == currentLine) return@launch
+            val updated = note.copy(
+                content = lines.also { it[index] = updatedLine }.joinToString("\n"),
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = true
+            )
+            repository.updateNote(updated)
+            if (_editingNote.value?.id == note.id) {
+                _editingNote.value = updated
+                _editorContent.value = updated.content
+            }
+            triggerBackgroundSync()
+        }
+    }
+
     // Network availability reactive flow
     private val networkAvailableFlow: Flow<Boolean> = callbackFlow {
         val connectivityManager = getApplication<Application>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
