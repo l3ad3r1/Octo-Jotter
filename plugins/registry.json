@@ -126,6 +126,16 @@
       "version": "1.0.0",
       "permissions": ["notes:write"],
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/note-actions/manifest.json"
+    },
+    {
+      "id": "task-dashboard",
+      "name": "Open Tasks Dashboard",
+      "author": "l3ad3r1",
+      "description": "Build dashboards from read-only note queries: open tasks across all notes and a folder-grouped notes index.",
+      "type": "script",
+      "version": "1.0.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/task-dashboard/manifest.json"
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "id": "task-dashboard",
+  "name": "Open Tasks Dashboard",
+  "version": "1.0.0",
+  "minAppVersion": "2.2",
+  "author": "l3ad3r1",
+  "description": "Builds a dashboard of open tasks across all readable notes.",
+  "type": "script",
+  "permissions": ["notes:read"],
+  "main": "octo.registerCommand(\"open-tasks\", \"Open tasks across all notes\", function(t){ var tasks = octo.notes.openTasks(); var out = [\"# Open Tasks Dashboard\", \"\", \"Generated from \" + tasks.length + \" open task\" + (tasks.length === 1 ? \"\" : \"s\") + \".\", \"\"]; if (tasks.length === 0) { out.push(\"No open tasks found.\"); return out.join(\"\\n\"); } var current = \"\"; for (var i = 0; i < tasks.length; i++) { var task = tasks[i]; var title = task.noteTitle || \"Untitled Note\"; if (title !== current) { current = title; out.push(\"## \" + current); if (task.folder) out.push(\"_\" + task.folder + \"_\"); out.push(\"\"); } out.push(\"- [ ] \" + task.text + \"  \"); out.push(\"  - Source: [[\" + current + \"]] line \" + task.lineNumber); if (task.tags && task.tags.length) out.push(\"  - Tags: #\" + Array.prototype.join.call(task.tags, \" #\")); } return out.join(\"\\n\"); });\nocto.registerCommand(\"notes-index\", \"Notes index by folder\", function(t){ var notes = octo.notes.list(); var groups = {}; for (var i = 0; i < notes.length; i++) { var note = notes[i]; var folder = note.folder || \"Uncategorized\"; if (!groups[folder]) groups[folder] = []; groups[folder].push(note); } var folders = []; for (var key in groups) folders.push(key); folders.sort(); var out = [\"# Notes Index\", \"\"]; for (var f = 0; f < folders.length; f++) { var folderName = folders[f]; out.push(\"## \" + folderName); groups[folderName].sort(function(a,b){ return String(a.displayTitle).localeCompare(String(b.displayTitle)); }); for (var n = 0; n < groups[folderName].length; n++) { var item = groups[folderName][n]; out.push(\"- [[\" + (item.displayTitle || item.title || \"Untitled Note\") + \"]]\" + (item.locked ? \" _(locked)_\" : \"\")); } out.push(\"\"); } return out.join(\"\\n\"); });"
+}

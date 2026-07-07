@@ -15,6 +15,8 @@ import com.l3ad3r1.octojotter.data.remote.RetrofitClient
 import com.l3ad3r1.octojotter.data.remote.TokenManager
 import com.l3ad3r1.octojotter.data.repository.NoteRepository
 import com.l3ad3r1.octojotter.data.repository.NoteRevision
+import com.l3ad3r1.octojotter.plugin.PluginNote
+import com.l3ad3r1.octojotter.plugin.PluginTask
 import com.l3ad3r1.octojotter.sync.SyncWorker
 import android.content.Context
 import android.net.Uri
@@ -265,12 +267,78 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         override fun listNoteTitles(): List<String> =
-            kotlinx.coroutines.runBlocking { repository.getAllNotes().map { it.title } }
+            readablePluginNotes().map { it.title }
+
+        override fun listNotes(): List<PluginNote> =
+            readablePluginNotes()
+
+        override fun searchNotes(query: String): List<PluginNote> {
+            val normalized = query.trim()
+            if (normalized.isEmpty()) return readablePluginNotes()
+            return readablePluginNotes().filter { note ->
+                note.title.contains(normalized, ignoreCase = true) ||
+                    note.displayTitle.contains(normalized, ignoreCase = true) ||
+                    note.content.contains(normalized, ignoreCase = true) ||
+                    note.tags.any { it.contains(normalized, ignoreCase = true) } ||
+                    note.folder.orEmpty().contains(normalized, ignoreCase = true)
+            }
+        }
+
+        override fun notesWithTag(tag: String): List<PluginNote> {
+            val normalized = tag.trim().removePrefix("#")
+            if (normalized.isEmpty()) return emptyList()
+            return readablePluginNotes().filter { note ->
+                note.tags.any { it.equals(normalized, ignoreCase = true) }
+            }
+        }
+
+        override fun openTasks(): List<PluginTask> =
+            readablePluginNotes()
+                .filterNot { it.locked }
+                .flatMap { note ->
+                    note.content.lines().mapIndexedNotNull { index, line ->
+                        val match = OPEN_TASK_REGEX.matchEntire(line) ?: return@mapIndexedNotNull null
+                        PluginTask(
+                            noteId = note.id,
+                            noteTitle = note.displayTitle.ifBlank { note.title.ifBlank { "Untitled Note" } },
+                            text = match.groupValues[1].trim(),
+                            line = line,
+                            lineNumber = index + 1,
+                            tags = note.tags,
+                            folder = note.folder,
+                            lastModifiedLocally = note.lastModifiedLocally
+                        )
+                    }
+                }
 
         override fun log(pluginId: String, message: String) {
             android.util.Log.i("OctoPlugin/$pluginId", message)
         }
     }
+
+    private fun readablePluginNotes(): List<PluginNote> =
+        kotlinx.coroutines.runBlocking {
+            repository.getAllNotes()
+                .filter { it.deletedAt == null }
+                .map { note ->
+                    PluginNote(
+                        id = note.id,
+                        title = note.title,
+                        displayTitle = note.displayTitle,
+                        content = if (note.locked) "" else note.content,
+                        tags = note.tags,
+                        folder = note.folder ?: note.folderPath.joinToString("/").ifBlank { null },
+                        path = note.path,
+                        lastModifiedLocally = note.lastModifiedLocally,
+                        locked = note.locked
+                    )
+                }
+        }
+
+    private companion object {
+        val OPEN_TASK_REGEX = Regex("""^\s*[-*]\s+\[\s]\s+(.*)$""")
+    }
+
     private val scriptEngine = com.l3ad3r1.octojotter.plugin.ScriptEngine(pluginHost)
     private val _pluginCommands =
         MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.ScriptEngine.CommandDescriptor>>(emptyList())

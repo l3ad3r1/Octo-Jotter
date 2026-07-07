@@ -136,8 +136,38 @@ class ScriptEngine(private val host: PluginHost? = null) {
         ScriptableObject.putProperty(notes, "list", object : BaseFunction() {
             override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
                 requirePermission(permissions, PluginPermissions.NOTES_READ)
+                val noteSnapshots = host?.listNotes() ?: emptyList()
+                return cx.newArray(scope, noteSnapshots.map { it.toJsObject(cx, scope) }.toTypedArray())
+            }
+        })
+        ScriptableObject.putProperty(notes, "titles", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_READ)
                 val titles = host?.listNoteTitles() ?: emptyList()
                 return cx.newArray(scope, titles.toTypedArray())
+            }
+        })
+        ScriptableObject.putProperty(notes, "search", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_READ)
+                val query = args?.getOrNull(0)?.let { Context.toString(it) } ?: ""
+                val noteSnapshots = host?.searchNotes(query) ?: emptyList()
+                return cx.newArray(scope, noteSnapshots.map { it.toJsObject(cx, scope) }.toTypedArray())
+            }
+        })
+        ScriptableObject.putProperty(notes, "withTag", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_READ)
+                val tag = args?.getOrNull(0)?.let { Context.toString(it) } ?: ""
+                val noteSnapshots = host?.notesWithTag(tag) ?: emptyList()
+                return cx.newArray(scope, noteSnapshots.map { it.toJsObject(cx, scope) }.toTypedArray())
+            }
+        })
+        ScriptableObject.putProperty(notes, "openTasks", object : BaseFunction() {
+            override fun call(cx: Context, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any>?): Any {
+                requirePermission(permissions, PluginPermissions.NOTES_READ)
+                val tasks = host?.openTasks() ?: emptyList()
+                return cx.newArray(scope, tasks.map { it.toJsObject(cx, scope) }.toTypedArray())
             }
         })
         ScriptableObject.putProperty(octo, "notes", notes)
@@ -151,6 +181,33 @@ class ScriptEngine(private val host: PluginHost? = null) {
         if (permission !in granted) {
             throw IllegalStateException("Permission denied: '$permission' was not granted to this plugin.")
         }
+    }
+
+    private fun PluginNote.toJsObject(cx: Context, scope: Scriptable): Scriptable {
+        val obj = cx.newObject(scope)
+        ScriptableObject.putProperty(obj, "id", id)
+        ScriptableObject.putProperty(obj, "title", title)
+        ScriptableObject.putProperty(obj, "displayTitle", displayTitle)
+        ScriptableObject.putProperty(obj, "content", content)
+        ScriptableObject.putProperty(obj, "tags", cx.newArray(scope, tags.toTypedArray()))
+        ScriptableObject.putProperty(obj, "folder", folder ?: "")
+        ScriptableObject.putProperty(obj, "path", path ?: "")
+        ScriptableObject.putProperty(obj, "lastModifiedLocally", lastModifiedLocally.toDouble())
+        ScriptableObject.putProperty(obj, "locked", locked)
+        return obj
+    }
+
+    private fun PluginTask.toJsObject(cx: Context, scope: Scriptable): Scriptable {
+        val obj = cx.newObject(scope)
+        ScriptableObject.putProperty(obj, "noteId", noteId)
+        ScriptableObject.putProperty(obj, "noteTitle", noteTitle)
+        ScriptableObject.putProperty(obj, "text", text)
+        ScriptableObject.putProperty(obj, "line", line)
+        ScriptableObject.putProperty(obj, "lineNumber", lineNumber)
+        ScriptableObject.putProperty(obj, "tags", cx.newArray(scope, tags.toTypedArray()))
+        ScriptableObject.putProperty(obj, "folder", folder ?: "")
+        ScriptableObject.putProperty(obj, "lastModifiedLocally", lastModifiedLocally.toDouble())
+        return obj
     }
 
     /** Denies Java-class access and enforces the per-run instruction budget. */

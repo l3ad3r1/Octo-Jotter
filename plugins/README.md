@@ -38,6 +38,7 @@ The plugins currently in this registry — browse their manifests for reference.
 | [Sort Tasks](sort-tasks/manifest.json) | — | Moves completed `- [x]` items to the bottom of the note. |
 | [Second Brain Tools](pkm-tools/manifest.json) | — | Dated daily note, append timestamp, extract open tasks. |
 | [Note Actions](note-actions/manifest.json) | `notes:write` | Duplicate a note, or split its tasks into a new note. |
+| [Open Tasks Dashboard](task-dashboard/manifest.json) | `notes:read` | Build a cross-note open task dashboard and folder-grouped notes index. |
 
 ### Snippets
 | Plugin | Description |
@@ -213,7 +214,11 @@ current editor text and returns the replacement text.
 |------|-----------|-------------|
 | `octo.registerCommand(id, name, fn)` | — | Register an editor command. `fn(text)` returns the new text. |
 | `octo.log(message)` | — | Write to the app's debug log (Settings → tap version 7×). |
-| `octo.notes.list()` | `notes:read` | Returns an array of your note titles. |
+| `octo.notes.list()` | `notes:read` | Returns read-only note objects: `id`, `title`, `displayTitle`, `content`, `tags`, `folder`, `path`, `lastModifiedLocally`, `locked`. Locked note bodies are redacted. |
+| `octo.notes.titles()` | `notes:read` | Returns an array of your note titles. |
+| `octo.notes.search(query)` | `notes:read` | Searches note title, body, tags, and folder. |
+| `octo.notes.withTag(tag)` | `notes:read` | Returns notes with the requested tag. |
+| `octo.notes.openTasks()` | `notes:read` | Returns open Markdown tasks across readable notes with source note and line number metadata. |
 | `octo.notes.create(title, content)` | `notes:write` | Creates a new note. |
 
 Declare any API you use in `permissions` (e.g. `"permissions": ["notes:write"]`);
@@ -239,6 +244,32 @@ and [`note-actions`](note-actions/manifest.json) (uses `notes:write`).
 > **Escaping tip:** author your JS in a normal `.js` file first, then JSON-escape
 > it into `main`. In `bash`:
 > `jq -Rs . my-plugin.js` prints the exact escaped string to paste.
+
+### Dataview-style note queries (v2.2+)
+
+Plugins that request `notes:read` can build dashboards across the user's notes:
+
+| Call | Returns |
+|------|---------|
+| `octo.notes.list()` | Read-only note objects with `id`, `title`, `displayTitle`, `content`, `tags`, `folder`, `path`, `lastModifiedLocally`, and `locked`. Locked note bodies are redacted. |
+| `octo.notes.titles()` | Array of note titles. |
+| `octo.notes.search(query)` | Notes matching title, body, tag, or folder text. |
+| `octo.notes.withTag(tag)` | Notes carrying the requested tag. |
+| `octo.notes.openTasks()` | Open Markdown tasks with `noteId`, `noteTitle`, `text`, `line`, `lineNumber`, `tags`, `folder`, and `lastModifiedLocally`. |
+
+Example:
+
+```js
+octo.registerCommand("open-tasks", "Open tasks across all notes", function(text) {
+  var tasks = octo.notes.openTasks();
+  var out = ["# Open Tasks", ""];
+  for (var i = 0; i < tasks.length; i++) {
+    out.push("- [ ] " + tasks[i].text + " ([["
+      + tasks[i].noteTitle + "]] line " + tasks[i].lineNumber + ")");
+  }
+  return out.join("\n");
+});
+```
 
 ---
 

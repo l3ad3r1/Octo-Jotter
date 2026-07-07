@@ -80,7 +80,7 @@ object PluginPermissions {
     const val NOTES_WRITE = "notes:write"
 
     fun describe(permission: String): String = when (permission) {
-        NOTES_READ -> "Read the titles of your notes"
+        NOTES_READ -> "Read your note titles, content, tags, folders, and open tasks"
         NOTES_WRITE -> "Create new notes"
         else -> permission
     }
