@@ -17,6 +17,7 @@ import com.l3ad3r1.octojotter.data.repository.NoteRepository
 import com.l3ad3r1.octojotter.data.repository.NoteRevision
 import com.l3ad3r1.octojotter.sync.SyncWorker
 import android.content.Context
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -621,6 +622,70 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         return repository.getBacklinks(title, noteId)
     }
 
+    fun exportMarkdownArchive() {
+        viewModelScope.launch {
+            _exportStatus.value = "Exporting Markdown..."
+            try {
+                val notes = repository.getAllNotes()
+                    .filter { it.deletedAt == null }
+                val exportsDir = java.io.File(getApplication<Application>().filesDir, "exports").apply { mkdirs() }
+                val filename = "octojotter_markdown_${System.currentTimeMillis()}.zip"
+                val file = java.io.File(exportsDir, filename)
+                java.util.zip.ZipOutputStream(file.outputStream()).use { zip ->
+                    val usedNames = mutableSetOf<String>()
+                    notes.forEach { note ->
+                        val baseName = note.title.ifBlank { "Untitled" }
+                            .replace("__", "/")
+                            .split("/")
+                            .joinToString("/") { segment ->
+                                segment.replace(Regex("""[\\:*?"<>|]"""), "-").ifBlank { "Untitled" }
+                            }
+                        var entryName = "$baseName.md"
+                        var suffix = 2
+                        while (!usedNames.add(entryName.lowercase())) {
+                            entryName = "${baseName} ($suffix).md"
+                            suffix++
+                        }
+                        zip.putNextEntry(java.util.zip.ZipEntry(entryName))
+                        zip.write(note.content.toByteArray(Charsets.UTF_8))
+                        zip.closeEntry()
+                    }
+                }
+                _lastExportedPath.value = file.absolutePath
+                _exportStatus.value = "Markdown archive ready: $filename. Tap Share to save it anywhere."
+            } catch (e: Exception) {
+                _lastExportedPath.value = null
+                _exportStatus.value = "Failed to export Markdown: ${e.message}"
+            }
+        }
+    }
+
+    fun importMarkdownFile(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val resolver = getApplication<Application>().contentResolver
+                val title = resolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+                }?.removeSuffix(".md")?.removeSuffix(".markdown") ?: "Imported note"
+                val content = resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: throw java.io.IOException("Couldn't read selected file.")
+                val note = NoteEntity(
+                    title = title.ifBlank { "Imported note" },
+                    content = content,
+                    folder = "Imported",
+                    lastModifiedLocally = System.currentTimeMillis(),
+                    needsSync = true
+                )
+                repository.insertNote(note)
+                _exportStatus.value = "Imported Markdown note: ${note.title}"
+                triggerBackgroundSync()
+            } catch (e: Exception) {
+                _exportStatus.value = "Failed to import Markdown: ${e.message}"
+            }
+        }
+    }
+
     fun selectTag(tag: String?) {
         _selectedTag.value = tag
     }
@@ -635,6 +700,53 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             repository.updateNote(updated)
             if (_editingNote.value?.id == note.id) {
                 _editingNote.value = updated
+            }
+            triggerBackgroundSync()
+        }
+    }
+
+    fun duplicateNote(note: NoteEntity) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val duplicate = note.copy(
+                id = 0,
+                gistId = null,
+                repository = null,
+                path = null,
+                sha = null,
+                title = "${note.title.ifBlank { "Untitled" }} (copy)",
+                lastModifiedLocally = now,
+                needsSync = true,
+                deletedAt = null,
+                pendingRemoteDelete = false,
+                remoteUpdatedAt = null,
+                lastSyncedContentHash = null,
+                conflictState = null,
+                conflictedRemoteContent = null,
+                conflictedRemoteModifiedAt = null
+            )
+            repository.insertNote(duplicate)
+            triggerBackgroundSync()
+        }
+    }
+
+    fun renameNote(note: NoteEntity, newDisplayTitle: String) {
+        val cleanedTitle = newDisplayTitle.trim().ifBlank { "Untitled Note" }
+        viewModelScope.launch {
+            val renamedTitle = if (note.title.contains("__")) {
+                note.title.substringBeforeLast("__") + "__" + cleanedTitle
+            } else {
+                cleanedTitle
+            }
+            val updated = note.copy(
+                title = renamedTitle,
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = true
+            )
+            repository.updateNote(updated)
+            if (_editingNote.value?.id == note.id) {
+                _editingNote.value = updated
+                _editorTitle.value = updated.displayTitle
             }
             triggerBackgroundSync()
         }

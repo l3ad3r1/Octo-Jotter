@@ -1,22 +1,30 @@
 package com.l3ad3r1.octojotter.ui
 
 import android.app.Activity
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -67,6 +76,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.FormatBold
@@ -75,12 +85,15 @@ import androidx.compose.material.icons.filled.FormatStrikethrough
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.InsertLink
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
@@ -107,7 +120,6 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -115,7 +127,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
@@ -129,12 +140,10 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -142,7 +151,14 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.TextStyle
@@ -164,6 +180,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -183,6 +200,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import com.l3ad3r1.octojotter.data.local.NoteEntity
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
@@ -191,6 +209,7 @@ import com.l3ad3r1.octojotter.ui.theme.octoStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.File
 
 @Composable
 fun NoteApp(viewModel: NoteViewModel) {
@@ -207,7 +226,7 @@ fun NoteApp(viewModel: NoteViewModel) {
     }
 
     // Settings is a pushed screen reached from the top-bar gear, not a bottom-nav
-    // destination — a 2-item bottom bar wasn't worth the permanent vertical cost.
+    // destination - a 2-item bottom bar wasn't worth the permanent vertical cost.
     NavHost(
         navController = navController,
         startDestination = "notes_list",
@@ -416,9 +435,14 @@ fun NotesListScreen(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val snackbarHostState = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var newFolderName by remember { mutableStateOf("") }
-    var noteToDelete by remember { mutableStateOf<NoteEntity?>(null) }
+    var notePendingDelete by remember { mutableStateOf<NoteEntity?>(null) }
+    var noteMenuTarget by remember { mutableStateOf<NoteEntity?>(null) }
+    var noteToRename by remember { mutableStateOf<NoteEntity?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var noteToMove by remember { mutableStateOf<NoteEntity?>(null) }
 
     // On the home list: back closes an open drawer; otherwise require a second
     // back press within 2s to exit, with a toast confirming the first press.
@@ -444,9 +468,9 @@ fun NotesListScreen(
         viewModel.markPendingDeletion(note.id)
         scope.launch {
             val result = snackbarHostState.showSnackbar(
-                message = "Note deleted",
+                message = "Note moved to Trash",
                 actionLabel = "Undo",
-                duration = SnackbarDuration.Short
+                duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
                 viewModel.undoPendingDeletion(note.id)
@@ -524,7 +548,7 @@ fun NotesListScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // Nested folder tree — repos nest into their folders. Built from
+                // Nested folder tree - repos nest into their folders. Built from
                 // all notes' locationPath, plus any empty custom folders.
                 val drawerTree = remember(allNotesForFolders, customFolders) {
                     buildFolderTree(allNotesForFolders).also { root ->
@@ -917,8 +941,8 @@ fun NotesListScreen(
                         val dismissState = rememberSwipeToDismissBoxState(
                             confirmValueChange = { dismissValue ->
                                 if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                    requestDelete(note)
-                                    true
+                                    notePendingDelete = note
+                                    false
                                 } else {
                                     false
                                 }
@@ -955,7 +979,7 @@ fun NotesListScreen(
                                     .fillMaxWidth()
                                     .combinedClickable(
                                         onClick = { onNavigateToEditor(note.id) },
-                                        onLongClick = { noteToDelete = note }
+                                        onLongClick = { noteMenuTarget = note }
                                     )
                                     .testTag("note_item_card_${note.id}"),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -1181,24 +1205,205 @@ fun NotesListScreen(
         }
     }
 
-    if (noteToDelete != null) {
+    notePendingDelete?.let { note ->
         AlertDialog(
-            onDismissRequest = { noteToDelete = null },
-            title = { Text("Move to Trash") },
-            text = { Text("This note will leave your main list and stay recoverable from Trash.") },
+            onDismissRequest = { notePendingDelete = null },
+            title = { Text("Move to Trash?") },
+            text = { Text("This note will leave your main list, but you can undo right after or restore it later from Trash.") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        noteToDelete?.let { viewModel.deleteNote(it) }
-                        noteToDelete = null
+                        notePendingDelete = null
+                        requestDelete(note)
                     },
-                    modifier = Modifier.testTag("confirm_delete_button")
+                    modifier = Modifier.testTag("confirm_swipe_delete_button")
                 ) {
                     Text("Move to Trash", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { noteToDelete = null }) {
+                TextButton(
+                    onClick = { notePendingDelete = null },
+                    modifier = Modifier.testTag("cancel_swipe_delete_button")
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    noteMenuTarget?.let { note ->
+        AlertDialog(
+            onDismissRequest = { noteMenuTarget = null },
+            title = { Text(note.displayTitle.ifBlank { "Untitled Note" }) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(note.content))
+                            noteMenuTarget = null
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Copied note content",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_copy_${note.id}")
+                    ) {
+                        Text("Copy content")
+                    }
+                    TextButton(
+                        onClick = {
+                            viewModel.duplicateNote(note)
+                            noteMenuTarget = null
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "Duplicated note",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_duplicate_${note.id}")
+                    ) {
+                        Text("Duplicate note")
+                    }
+                    TextButton(
+                        onClick = {
+                            renameText = note.displayTitle.ifBlank { "Untitled Note" }
+                            noteToRename = note
+                            noteMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_rename_${note.id}")
+                    ) {
+                        Text("Rename")
+                    }
+                    TextButton(
+                        onClick = {
+                            noteToMove = note
+                            noteMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_move_${note.id}")
+                    ) {
+                        Text("Move to folder")
+                    }
+                    TextButton(
+                        onClick = {
+                            viewModel.togglePinNote(note)
+                            noteMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_pin_${note.id}")
+                    ) {
+                        Text(if (note.pinned) "Unpin note" else "Pin note")
+                    }
+                    TextButton(
+                        onClick = {
+                            viewModel.toggleLockNote(note)
+                            noteMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_lock_${note.id}")
+                    ) {
+                        Text(if (note.locked) "Unlock note" else "Lock note")
+                    }
+                    TextButton(
+                        onClick = {
+                            noteMenuTarget = null
+                            notePendingDelete = note
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_delete_${note.id}")
+                    ) {
+                        Text("Move to Trash", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { noteMenuTarget = null }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
+    noteToRename?.let { note ->
+        AlertDialog(
+            onDismissRequest = { noteToRename = null },
+            title = { Text("Rename note") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("rename_note_input")
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.renameNote(note, renameText)
+                        noteToRename = null
+                    },
+                    modifier = Modifier.testTag("rename_note_confirm_button")
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { noteToRename = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    noteToMove?.let { note ->
+        val moveFolders = remember(allFolders) {
+            (listOf("Uncategorized") + allFolders).distinct()
+        }
+        AlertDialog(
+            onDismissRequest = { noteToMove = null },
+            title = { Text("Move note") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    moveFolders.forEach { folder ->
+                        TextButton(
+                            onClick = {
+                                viewModel.setNoteFolder(note, folder)
+                                noteToMove = null
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("move_note_to_$folder")
+                        ) {
+                            Text(folder)
+                        }
+                    }
+                    OutlinedTextField(
+                        value = newFolderName,
+                        onValueChange = { newFolderName = it },
+                        label = { Text("New folder") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("move_note_new_folder_input")
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val folder = newFolderName.trim()
+                        if (folder.isNotEmpty()) {
+                            viewModel.addFolder(folder)
+                            viewModel.setNoteFolder(note, folder)
+                            newFolderName = ""
+                            noteToMove = null
+                        }
+                    },
+                    modifier = Modifier.testTag("move_note_new_folder_confirm_button")
+                ) {
+                    Text("Move")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { noteToMove = null }) {
                     Text("Cancel")
                 }
             }
@@ -1390,7 +1595,9 @@ fun EditorScreen(
         )
     }
 
-    var activeTab by remember { mutableIntStateOf(0) } // 0 = Edit, 1 = Preview
+    val context = LocalContext.current
+    var isEditing by remember { mutableStateOf(false) }
+    var showDrawingDialog by remember { mutableStateOf(false) }
 
     var textFieldValue by remember {
         mutableStateOf(
@@ -1421,7 +1628,7 @@ fun EditorScreen(
         val end = selection.end
 
         val selectedText = text.substring(start, end)
-        // A trailing space marks a line prefix (headings, lists, quotes, tasks) —
+        // A trailing space marks a line prefix (headings, lists, quotes, tasks) -
         // those get no closing token. Wrap tokens (**, *, ~~, `) mirror themselves.
         val isLinePrefix = syntax.endsWith(" ")
         val actualSuffix = when {
@@ -1448,6 +1655,32 @@ fun EditorScreen(
             selection = androidx.compose.ui.text.TextRange(newSelectionStart, newSelectionEnd)
         )
         viewModel.onNoteTextChanged(editorTitle, newText)
+    }
+
+    fun insertTextAtCursor(insertedText: String) {
+        val text = textFieldValue.text
+        val selection = textFieldValue.selection
+        val start = selection.start
+        val end = selection.end
+        val newText = text.substring(0, start) + insertedText + text.substring(end)
+        val cursor = start + insertedText.length
+        textFieldValue = TextFieldValue(
+            text = newText,
+            selection = TextRange(cursor)
+        )
+        viewModel.onNoteTextChanged(editorTitle, newText)
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        val imagePath = copyImageToNoteAttachment(context, uri, noteId)
+        if (imagePath != null) {
+            insertTextAtCursor("\n![Image]($imagePath)\n")
+        } else {
+            Toast.makeText(context, "Couldn't add that image.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     val scope = rememberCoroutineScope()
@@ -1591,11 +1824,126 @@ fun EditorScreen(
         }
     }
 
-    val isWideScreen = LocalConfiguration.current.screenWidthDp.dp > 600.dp
+    if (showDrawingDialog) {
+        DrawingDialog(
+            onDismiss = { showDrawingDialog = false },
+            onSave = { strokes, canvasSize ->
+                val drawingPath = saveDrawingToNoteAttachment(context, noteId, strokes, canvasSize)
+                if (drawingPath != null) {
+                    insertTextAtCursor("\n![Drawing]($drawingPath)\n")
+                } else {
+                    Toast.makeText(context, "Couldn't save that drawing.", Toast.LENGTH_SHORT).show()
+                }
+                showDrawingDialog = false
+            }
+        )
+    }
+
+    val editorToolbar: @Composable () -> Unit = {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 3.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { insertMarkdown("# ", "") }, modifier = Modifier.testTag("format_heading_button")) {
+                    Icon(Icons.Default.Title, contentDescription = "Heading 1")
+                }
+                IconButton(onClick = { insertMarkdown("## ", "") }, modifier = Modifier.testTag("format_heading2_button")) {
+                    Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                }
+                IconButton(onClick = { insertMarkdown("### ", "") }, modifier = Modifier.testTag("format_heading3_button")) {
+                    Text("H3", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                }
+                IconButton(onClick = { insertMarkdown("**") }, modifier = Modifier.testTag("format_bold_button")) {
+                    Icon(Icons.Default.FormatBold, contentDescription = "Format Bold")
+                }
+                IconButton(onClick = { insertMarkdown("*") }, modifier = Modifier.testTag("format_italic_button")) {
+                    Icon(Icons.Default.FormatItalic, contentDescription = "Format Italic")
+                }
+                IconButton(onClick = { insertMarkdown("~~") }, modifier = Modifier.testTag("format_strikethrough_button")) {
+                    Icon(Icons.Default.FormatStrikethrough, contentDescription = "Format Strikethrough")
+                }
+                IconButton(onClick = { insertMarkdown("`") }, modifier = Modifier.testTag("format_code_button")) {
+                    Icon(Icons.Default.Code, contentDescription = "Inline Code")
+                }
+                IconButton(onClick = { insertMarkdown("- ", "") }, modifier = Modifier.testTag("format_list_button")) {
+                    Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Format Unordered List")
+                }
+                IconButton(onClick = { insertMarkdown("1. ", "") }, modifier = Modifier.testTag("format_numbered_list_button")) {
+                    Icon(Icons.Default.FormatListNumbered, contentDescription = "Format Numbered List")
+                }
+                IconButton(onClick = { insertMarkdown("> ", "") }, modifier = Modifier.testTag("format_quote_button")) {
+                    Icon(Icons.Default.FormatQuote, contentDescription = "Blockquote")
+                }
+                IconButton(onClick = { insertMarkdown("- [ ] ", "") }, modifier = Modifier.testTag("format_checkbox_button")) {
+                    Icon(Icons.Default.CheckBox, contentDescription = "Task checkbox")
+                }
+                IconButton(onClick = { insertMarkdown("[", "](url)") }, modifier = Modifier.testTag("format_link_button")) {
+                    Icon(Icons.Default.InsertLink, contentDescription = "Link")
+                }
+                IconButton(onClick = { insertMarkdown("[[", "]]") }, modifier = Modifier.testTag("format_wikilink_button")) {
+                    Icon(Icons.Default.Link, contentDescription = "Wiki link")
+                }
+                IconButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.testTag("add_image_button")) {
+                    Icon(Icons.Default.Image, contentDescription = "Add image")
+                }
+                IconButton(onClick = { showDrawingDialog = true }, modifier = Modifier.testTag("add_drawing_button")) {
+                    Icon(Icons.Default.Brush, contentDescription = "Add drawing")
+                }
+                if (pluginCommands.isNotEmpty() || pluginSnippets.isNotEmpty()) {
+                    Box {
+                        IconButton(onClick = { showPluginMenu = true }, modifier = Modifier.testTag("plugin_commands_button")) {
+                            Icon(Icons.Default.Extension, contentDescription = "Plugin commands")
+                        }
+                        DropdownMenu(expanded = showPluginMenu, onDismissRequest = { showPluginMenu = false }) {
+                            pluginCommands.forEach { cmd ->
+                                DropdownMenuItem(
+                                    text = { Text(cmd.name) },
+                                    leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null) },
+                                    onClick = {
+                                        showPluginMenu = false
+                                        scope.launch {
+                                            val out = viewModel.runPluginCommand(cmd, textFieldValue.text)
+                                            if (out != null) {
+                                                textFieldValue = TextFieldValue(text = out, selection = TextRange(out.length))
+                                                viewModel.onNoteTextChanged(editorTitle, out)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.testTag("plugin_command_${cmd.pluginId}_${cmd.id}")
+                                )
+                            }
+                            pluginSnippets.forEach { snippet ->
+                                DropdownMenuItem(
+                                    text = { Text(snippet.name) },
+                                    leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null) },
+                                    onClick = {
+                                        showPluginMenu = false
+                                        insertTextAtCursor(snippet.content)
+                                    },
+                                    modifier = Modifier.testTag("plugin_snippet_${snippet.id}")
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            Column {
+                TopAppBar(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1613,6 +1961,16 @@ fun EditorScreen(
                         Spacer(modifier = Modifier.weight(1f))
                         SaveStatusIndicator(saveStatus = saveStatus)
                         Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { isEditing = !isEditing },
+                            modifier = Modifier.testTag("editor_mode_button")
+                        ) {
+                            Icon(
+                                imageVector = if (isEditing) Icons.Default.Visibility else Icons.Default.Edit,
+                                contentDescription = if (isEditing) "Preview note" else "Edit note",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                         note?.let { currentNote ->
                             IconButton(
                                 onClick = onNavigateToHistory,
@@ -1658,319 +2016,202 @@ fun EditorScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-            )
-        },
-        bottomBar = {
-            if (activeTab == 0 || isWideScreen) {
-                BottomAppBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    tonalElevation = 4.dp,
-                    // Lift the toolbar above the soft keyboard so formatting is
-                    // reachable exactly when the user is typing.
-                    modifier = Modifier
-                        .height(64.dp)
-                        .imePadding()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Heading 1
-                        IconButton(
-                            onClick = { insertMarkdown("# ", "") },
-                            modifier = Modifier.testTag("format_heading_button")
-                        ) {
-                            Icon(Icons.Default.Title, contentDescription = "Heading 1")
-                        }
-                        // Heading 2
-                        IconButton(
-                            onClick = { insertMarkdown("## ", "") },
-                            modifier = Modifier.testTag("format_heading2_button")
-                        ) {
-                            Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                        }
-                        // Heading 3
-                        IconButton(
-                            onClick = { insertMarkdown("### ", "") },
-                            modifier = Modifier.testTag("format_heading3_button")
-                        ) {
-                            Text("H3", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                        }
-                        // Bold
-                        IconButton(
-                            onClick = { insertMarkdown("**") },
-                            modifier = Modifier.testTag("format_bold_button")
-                        ) {
-                            Icon(Icons.Default.FormatBold, contentDescription = "Format Bold")
-                        }
-                        // Italic
-                        IconButton(
-                            onClick = { insertMarkdown("*") },
-                            modifier = Modifier.testTag("format_italic_button")
-                        ) {
-                            Icon(Icons.Default.FormatItalic, contentDescription = "Format Italic")
-                        }
-                        // Strikethrough
-                        IconButton(
-                            onClick = { insertMarkdown("~~") },
-                            modifier = Modifier.testTag("format_strikethrough_button")
-                        ) {
-                            Icon(Icons.Default.FormatStrikethrough, contentDescription = "Format Strikethrough")
-                        }
-                        // Inline code
-                        IconButton(
-                            onClick = { insertMarkdown("`") },
-                            modifier = Modifier.testTag("format_code_button")
-                        ) {
-                            Icon(Icons.Default.Code, contentDescription = "Inline Code")
-                        }
-                        // Unordered List
-                        IconButton(
-                            onClick = { insertMarkdown("- ", "") },
-                            modifier = Modifier.testTag("format_list_button")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Format Unordered List")
-                        }
-                        // Numbered list
-                        IconButton(
-                            onClick = { insertMarkdown("1. ", "") },
-                            modifier = Modifier.testTag("format_numbered_list_button")
-                        ) {
-                            Icon(Icons.Default.FormatListNumbered, contentDescription = "Format Numbered List")
-                        }
-                        // Blockquote
-                        IconButton(
-                            onClick = { insertMarkdown("> ", "") },
-                            modifier = Modifier.testTag("format_quote_button")
-                        ) {
-                            Icon(Icons.Default.FormatQuote, contentDescription = "Blockquote")
-                        }
-                        // Task checkbox
-                        IconButton(
-                            onClick = { insertMarkdown("- [ ] ", "") },
-                            modifier = Modifier.testTag("format_checkbox_button")
-                        ) {
-                            Icon(Icons.Default.CheckBox, contentDescription = "Task checkbox")
-                        }
-                        // Markdown link
-                        IconButton(
-                            onClick = { insertMarkdown("[", "](url)") },
-                            modifier = Modifier.testTag("format_link_button")
-                        ) {
-                            Icon(Icons.Default.InsertLink, contentDescription = "Link")
-                        }
-                        // Wiki link
-                        IconButton(
-                            onClick = { insertMarkdown("[[", "]]") },
-                            modifier = Modifier.testTag("format_wikilink_button")
-                        ) {
-                            Icon(Icons.Default.Link, contentDescription = "Wiki link")
-                        }
-                        // Plugin commands + snippets (shown when any are contributed)
-                        if (pluginCommands.isNotEmpty() || pluginSnippets.isNotEmpty()) {
-                            Box {
-                                IconButton(
-                                    onClick = { showPluginMenu = true },
-                                    modifier = Modifier.testTag("plugin_commands_button")
-                                ) {
-                                    Icon(Icons.Default.Extension, contentDescription = "Plugin commands")
-                                }
-                                DropdownMenu(
-                                    expanded = showPluginMenu,
-                                    onDismissRequest = { showPluginMenu = false }
-                                ) {
-                                    // Script commands: transform the whole note text.
-                                    pluginCommands.forEach { cmd ->
-                                        DropdownMenuItem(
-                                            text = { Text(cmd.name) },
-                                            leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null) },
-                                            onClick = {
-                                                showPluginMenu = false
-                                                scope.launch {
-                                                    val out = viewModel.runPluginCommand(cmd, textFieldValue.text)
-                                                    if (out != null) {
-                                                        textFieldValue = TextFieldValue(
-                                                            text = out,
-                                                            selection = androidx.compose.ui.text.TextRange(out.length)
-                                                        )
-                                                        viewModel.onNoteTextChanged(editorTitle, out)
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.testTag("plugin_command_${cmd.pluginId}_${cmd.id}")
-                                        )
-                                    }
-                                    // Snippets: insert their content at the cursor.
-                                    pluginSnippets.forEach { snippet ->
-                                        DropdownMenuItem(
-                                            text = { Text(snippet.name) },
-                                            leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null) },
-                                            onClick = {
-                                                showPluginMenu = false
-                                                val tfv = textFieldValue
-                                                val start = tfv.selection.start
-                                                val end = tfv.selection.end
-                                                val newText = tfv.text.substring(0, start) + snippet.content + tfv.text.substring(end)
-                                                textFieldValue = TextFieldValue(
-                                                    text = newText,
-                                                    selection = androidx.compose.ui.text.TextRange(start + snippet.content.length)
-                                                )
-                                                viewModel.onNoteTextChanged(editorTitle, newText)
-                                            },
-                                            modifier = Modifier.testTag("plugin_snippet_${snippet.id}")
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                )
+                if (isEditing) {
+                    editorToolbar()
                 }
             }
-        }
+        },
     ) { innerPadding ->
         note?.let {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
-                val isWideScreenFromConstraints = maxWidth > 600.dp
-
-                if (isWideScreenFromConstraints) {
-                    // Wide screen: Split-screen (Edit on left, Preview on right)
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(16.dp)
-                        ) {
-                            EditorInputs(
-                                title = editorTitle,
-                                textFieldValue = textFieldValue,
-                                onTitleChanged = { newTitle ->
-                                    viewModel.onNoteTextChanged(newTitle, textFieldValue.text)
-                                },
-                                onContentChanged = { newValue ->
-                                    textFieldValue = newValue
-                                    viewModel.onNoteTextChanged(editorTitle, newValue.text)
-                                },
-                                tags = note?.tags ?: emptyList(),
-                                onTagsChanged = { newTags ->
-                                    viewModel.updateTags(newTags)
-                                },
-                                currentFolder = note?.folder,
-                                availableFolders = availableFolders,
-                                onFolderChanged = { folder ->
-                                    note?.let { viewModel.setNoteFolder(it, folder) }
-                                },
-                                backlinksSection = backlinksSection
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.outlineVariant)
-                        )
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                        ) {
-                            Text(
-                                text = "Live Preview",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
-                            )
-                            MarkdownPreview(
-                                markdown = editorContent,
-                                modifier = Modifier.fillMaxSize(),
-                                onWikiLinkClick = onWikiLinkClick,
-                                onHashtagClick = { hashtag ->
-                                    viewModel.selectTag(hashtag)
-                                    handleExit()
-                                }
-                            )
-                        }
-                    }
-                } else {
-                    // Compact screen: Tabs (Edit vs Preview)
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        TabRow(selectedTabIndex = activeTab) {
-                            Tab(
-                                selected = activeTab == 0,
-                                onClick = { activeTab = 0 },
-                                icon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                                text = { Text("Edit") },
-                                modifier = Modifier.testTag("tab_edit")
-                            )
-                            Tab(
-                                selected = activeTab == 1,
-                                onClick = { activeTab = 1 },
-                                icon = { Icon(Icons.Default.Visibility, contentDescription = null) },
-                                text = { Text("Preview") },
-                                modifier = Modifier.testTag("tab_preview")
-                            )
-                        }
-
-                        if (activeTab == 0) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp)
-                            ) {
-                                EditorInputs(
-                                    title = editorTitle,
-                                    textFieldValue = textFieldValue,
-                                    onTitleChanged = { newTitle ->
-                                        viewModel.onNoteTextChanged(newTitle, textFieldValue.text)
-                                    },
-                                    onContentChanged = { newValue ->
-                                        textFieldValue = newValue
-                                        viewModel.onNoteTextChanged(editorTitle, newValue.text)
-                                    },
-                                    tags = note?.tags ?: emptyList(),
-                                    onTagsChanged = { newTags ->
-                                        viewModel.updateTags(newTags)
-                                    },
-                                    currentFolder = note?.folder,
-                                    availableFolders = availableFolders,
-                                    onFolderChanged = { folder ->
-                                        note?.let { viewModel.setNoteFolder(it, folder) }
-                                    },
-                                    backlinksSection = backlinksSection
-                                )
-                            }
-                        } else {
-                            MarkdownPreview(
-                                markdown = editorContent,
-                                modifier = Modifier.fillMaxSize(),
-                                onWikiLinkClick = onWikiLinkClick,
-                                onHashtagClick = { hashtag ->
-                                    viewModel.selectTag(hashtag)
-                                    handleExit()
-                                }
-                            )
-                        }
-                    }
+            if (isEditing) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(MaterialTheme.colorScheme.background)
+                        .imePadding()
+                        .padding(16.dp)
+                ) {
+                    EditorInputs(
+                        title = editorTitle,
+                        textFieldValue = textFieldValue,
+                        onTitleChanged = { newTitle ->
+                            viewModel.onNoteTextChanged(newTitle, textFieldValue.text)
+                        },
+                        onContentChanged = { newValue ->
+                            textFieldValue = newValue
+                            viewModel.onNoteTextChanged(editorTitle, newValue.text)
+                        },
+                        tags = note?.tags ?: emptyList(),
+                        onTagsChanged = { newTags ->
+                            viewModel.updateTags(newTags)
+                        },
+                        currentFolder = note?.folder,
+                        availableFolders = availableFolders,
+                        onFolderChanged = { folder ->
+                            note?.let { viewModel.setNoteFolder(it, folder) }
+                        },
+                        backlinksSection = backlinksSection
+                    )
                 }
-            }
-        } ?: Box(
+            } else {
+                MarkdownPreview(
+                    markdown = editorContent,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(MaterialTheme.colorScheme.background),
+                    onWikiLinkClick = onWikiLinkClick,
+                    onHashtagClick = { hashtag ->
+                        viewModel.selectTag(hashtag)
+                        handleExit()
+                    }
+                )
+            }        } ?: Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator()
         }
     }
+}
+
+private fun copyImageToNoteAttachment(context: Context, uri: Uri, noteId: Int): String? = runCatching {
+    val extension = when (context.contentResolver.getType(uri)) {
+        "image/jpeg" -> "jpg"
+        "image/png" -> "png"
+        "image/webp" -> "webp"
+        "image/gif" -> "gif"
+        else -> "png"
+    }
+    val file = File(noteAttachmentDir(context, noteId), "image_${System.currentTimeMillis()}.$extension")
+    val input = context.contentResolver.openInputStream(uri) ?: return@runCatching null
+    input.use { source ->
+        file.outputStream().use { target ->
+            source.copyTo(target)
+        }
+    }
+    file.absolutePath.replace("\\", "/")
+}.getOrNull()
+
+private fun saveDrawingToNoteAttachment(
+    context: Context,
+    noteId: Int,
+    strokes: List<List<Offset>>,
+    canvasSize: IntSize
+): String? = runCatching {
+    val width = 1200
+    val height = 800
+    val sourceWidth = canvasSize.width.takeIf { it > 0 } ?: width
+    val sourceHeight = canvasSize.height.takeIf { it > 0 } ?: height
+    val scaleX = width / sourceWidth.toFloat()
+    val scaleY = height / sourceHeight.toFloat()
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.BLACK
+        strokeWidth = 8f
+        style = android.graphics.Paint.Style.STROKE
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+
+    canvas.drawColor(android.graphics.Color.WHITE)
+    strokes.forEach { stroke ->
+        stroke.zipWithNext { from, to ->
+            canvas.drawLine(from.x * scaleX, from.y * scaleY, to.x * scaleX, to.y * scaleY, paint)
+        }
+    }
+
+    val file = File(noteAttachmentDir(context, noteId), "drawing_${System.currentTimeMillis()}.png")
+    file.outputStream().use { output ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+    }
+    file.absolutePath.replace("\\", "/")
+}.getOrNull()
+
+private fun noteAttachmentDir(context: Context, noteId: Int): File {
+    return File(context.filesDir, "attachments/$noteId").apply { mkdirs() }
+}
+
+@Composable
+fun DrawingDialog(
+    onDismiss: () -> Unit,
+    onSave: (List<List<Offset>>, IntSize) -> Unit
+) {
+    val strokes = remember { mutableStateListOf<List<Offset>>() }
+    var currentStroke by remember { mutableStateOf<List<Offset>>(emptyList()) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Drawing") },
+        text = {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(8.dp),
+                tonalElevation = 1.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp)
+            ) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(8.dp))
+                        .onSizeChanged { canvasSize = it }
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { offset -> currentStroke = listOf(offset) },
+                                onDrag = { change, _ ->
+                                    currentStroke = currentStroke + change.position
+                                    change.consume()
+                                },
+                                onDragEnd = {
+                                    if (currentStroke.size > 1) strokes.add(currentStroke)
+                                    currentStroke = emptyList()
+                                },
+                                onDragCancel = { currentStroke = emptyList() }
+                            )
+                        }
+                ) {
+                    val visibleStrokes = strokes + listOf(currentStroke).filter { it.isNotEmpty() }
+                    visibleStrokes.forEach { stroke ->
+                        if (stroke.size == 1) {
+                            drawCircle(Color.Black, radius = 4.dp.toPx(), center = stroke.first())
+                        } else {
+                            val path = Path().apply {
+                                moveTo(stroke.first().x, stroke.first().y)
+                                stroke.drop(1).forEach { point -> lineTo(point.x, point.y) }
+                            }
+                            drawPath(
+                                path = path,
+                                color = Color.Black,
+                                style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val allStrokes = strokes + listOf(currentStroke).filter { it.isNotEmpty() }
+                    if (allStrokes.isNotEmpty()) onSave(allStrokes, canvasSize) else onDismiss()
+                },
+                modifier = Modifier.testTag("drawing_insert_button")
+            ) {
+                Text("Insert")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("drawing_cancel_button")) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2030,7 +2271,7 @@ fun EditorInputs(
                 items(tags) { tag ->
                     InputChip(
                         selected = true,
-                        // Chip body is a no-op; only the trailing ✕ removes the tag,
+                        // Chip body is a no-op; only the trailing x removes the tag,
                         // so an accidental tap can't silently delete it.
                         onClick = { },
                         label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
@@ -2777,6 +3018,11 @@ fun SettingsScreen(
     var tokenVisible by remember { mutableStateOf(false) }
     var showClearTokenConfirm by remember { mutableStateOf(false) }
     var newRepoInput by remember { mutableStateOf("") }
+    val markdownImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.importMarkdownFile(it) }
+    }
 
     // Synchronize local input field with stored token on first load
     LaunchedEffect(token) {
@@ -2787,7 +3033,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showClearTokenConfirm = false },
             title = { Text("Disconnect GitHub?") },
-            text = { Text("This removes your saved access token from this device. Your notes stay here — only cloud sync stops until you reconnect.") },
+            text = { Text("This removes your saved access token from this device. Your notes stay here - only cloud sync stops until you reconnect.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -3169,7 +3415,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    // Discovered repos not already in the sync list — tap to add.
+                    // Discovered repos not already in the sync list - tap to add.
                     val undiscovered = availableRepos.filter { it !in repositories }
                     if (undiscovered.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -3307,6 +3553,30 @@ fun SettingsScreen(
                         Text("Export Database to JSON")
                     }
 
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { viewModel.exportMarkdownArchive() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("export_markdown_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.Download, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Export Notes as Markdown ZIP")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { markdownImportLauncher.launch(arrayOf("text/markdown", "text/plain", "text/*", "application/octet-stream")) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("import_markdown_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.UploadFile, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Import Markdown File")
+                    }
+
                     lastExportedPath?.let { path ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -3318,7 +3588,11 @@ fun SettingsScreen(
                                     file
                                 )
                                 val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                    type = "application/json"
+                                    type = when (file.extension.lowercase()) {
+                                        "zip" -> "application/zip"
+                                        "json" -> "application/json"
+                                        else -> "application/octet-stream"
+                                    }
                                     putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                     addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
@@ -3460,7 +3734,7 @@ fun SettingsScreen(
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text("Downloading ${dl.percent}%")
                                         }
-                                        DownloadStatus.Installing -> Text("Opening installer…")
+                                        DownloadStatus.Installing -> Text("Opening installer...")
                                         else -> {
                                             Icon(Icons.Default.Download, contentDescription = null)
                                             Spacer(modifier = Modifier.width(8.dp))
@@ -3558,7 +3832,33 @@ fun MarkdownPreview(
             )
         } else {
             lines.forEach { line ->
+                val imageMatch = Regex("""!\[([^]]*)]\(([^)]+)\)""").matchEntire(line.trim())
                 when {
+                    imageMatch != null -> {
+                        val description = imageMatch.groupValues[1].ifBlank { "Note image" }
+                        val imagePath = imageMatch.groupValues[2]
+                        val bitmap = remember(imagePath) {
+                            BitmapFactory.decodeFile(imagePath)
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap.asImageBitmap(),
+                                contentDescription = description,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            )
+                        } else {
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                     line.startsWith("# ") -> {
                         Text(
                             text = line.substring(2),
@@ -3638,7 +3938,7 @@ fun MarkdownPreview(
                             verticalAlignment = Alignment.Top
                         ) {
                             Text(
-                                text = "• ",
+                                text = "- ",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -4023,7 +4323,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
             )
         }
 
-        // 3. Italic (*text*) — single asterisks only, so it doesn't match inside **bold**
+        // 3. Italic (*text*) - single asterisks only, so it doesn't match inside **bold**
         val italicRegex = """(?<!\*)\*(?!\*)([^*\n]+)\*(?!\*)""".toRegex()
         italicRegex.findAll(text).forEach { match ->
             addStyle(

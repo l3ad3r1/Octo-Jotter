@@ -33,11 +33,16 @@ data class NoteEntity(
     val conflictedRemoteModifiedAt: Long? = null
 ) {
     val folderPath: List<String>
-        get() = if (title.contains("__")) {
-            title.split("__").dropLast(1)
-        } else {
-            emptyList()
-        }
+        get() = folder
+            ?.split("/")
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: if (title.contains("__")) {
+                title.split("__").dropLast(1)
+            } else {
+                emptyList()
+            }
 
     // Full nesting location for the folder tree / drawer: the repository name
     // (for repo-backed notes) followed by the in-repo folders. Non-repo notes

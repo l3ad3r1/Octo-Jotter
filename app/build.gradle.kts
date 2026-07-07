@@ -17,8 +17,8 @@ android {
     applicationId = "com.l3ad3r1.octojotter"
     minSdk = 24
     targetSdk = 36
-    versionCode = 11
-    versionName = "2.0"
+    versionCode = 12
+    versionName = "2.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
