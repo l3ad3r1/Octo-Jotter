@@ -1,0 +1,11 @@
+{
+  "id": "toc",
+  "name": "Table of Contents",
+  "version": "1.0.0",
+  "minAppVersion": "1.6",
+  "author": "l3ad3r1",
+  "description": "Editor command that scans your Markdown headings and inserts a nested table of contents at the top.",
+  "type": "script",
+  "permissions": [],
+  "main": "octo.registerCommand(\"toc\", \"Insert Table of Contents\", function(t){ var text = String(t); var lines = text.split(\"\\n\"); var toc = []; for (var i = 0; i < lines.length; i++) { var m = lines[i].match(/^(#{1,6})\\s+(.+)$/); if (m) { var level = m[1].length; var title = m[2].replace(/[*_`~]/g, \"\").trim(); var indent = new Array((level - 1) * 2 + 1).join(\" \"); toc.push(indent + \"- \" + title); } } if (toc.length === 0) { octo.log(\"No headings found\"); return text; } return \"## Table of Contents\\n\" + toc.join(\"\\n\") + \"\\n\\n\" + text; });"
+}

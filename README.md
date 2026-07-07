@@ -123,6 +123,8 @@ Plugins** (no app rebuild required — the registry is fetched live).
   test/submit checklist.
 - 🧩 **Starter template:** copy [`plugins/_template/`](plugins/_template/) for a
   ready-made `theme` / `snippet` / `script` manifest to fill in.
+- 🤝 **Submitting one:** see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the plugin PR
+  checklist and review criteria.
 
 ## Project structure
 

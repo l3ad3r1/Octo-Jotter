@@ -46,6 +46,33 @@
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/daybreak/manifest.json"
     },
     {
+      "id": "emerald-dark",
+      "name": "Emerald",
+      "author": "l3ad3r1",
+      "description": "A deep forest-green dark theme with bright emerald accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/emerald-dark/manifest.json"
+    },
+    {
+      "id": "amber-dark",
+      "name": "Amber",
+      "author": "l3ad3r1",
+      "description": "A warm dark theme lit by golden amber accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/amber-dark/manifest.json"
+    },
+    {
+      "id": "toc",
+      "name": "Table of Contents",
+      "author": "l3ad3r1",
+      "description": "Editor command that scans your Markdown headings and inserts a nested table of contents at the top.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/toc/manifest.json"
+    },
+    {
       "id": "text-tools",
       "name": "Text Tools",
       "author": "l3ad3r1",

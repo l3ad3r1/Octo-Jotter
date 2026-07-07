@@ -1,0 +1,34 @@
+{
+  "id": "amber-dark",
+  "name": "Amber",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "A warm dark theme lit by golden amber accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#FFB868",
+      "onPrimary": "#452B00",
+      "primaryContainer": "#633F00",
+      "onPrimaryContainer": "#FFDDB3",
+      "secondary": "#DDC2A1",
+      "onSecondary": "#3E2D17",
+      "secondaryContainer": "#56422B",
+      "onSecondaryContainer": "#FBDEBC",
+      "background": "#17130D",
+      "onBackground": "#EDE0D4",
+      "surface": "#1C170F",
+      "onSurface": "#EDE0D4",
+      "surfaceVariant": "#4E4539",
+      "onSurfaceVariant": "#D1C5B4",
+      "surfaceContainer": "#241E15",
+      "error": "#FFB4AB",
+      "onError": "#690005",
+      "outline": "#9C8E7E",
+      "outlineVariant": "#4E4539"
+    }
+  }
+}

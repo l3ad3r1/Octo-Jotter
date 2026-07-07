@@ -1,0 +1,34 @@
+{
+  "id": "emerald-dark",
+  "name": "Emerald",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "A deep forest-green dark theme with bright emerald accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#6FDBA8",
+      "onPrimary": "#003824",
+      "primaryContainer": "#005138",
+      "onPrimaryContainer": "#8CF8C4",
+      "secondary": "#B6CCC0",
+      "onSecondary": "#21352C",
+      "secondaryContainer": "#374B41",
+      "onSecondaryContainer": "#D2E8DB",
+      "background": "#0A140F",
+      "onBackground": "#DFE4DF",
+      "surface": "#0E1A14",
+      "onSurface": "#DFE4DF",
+      "surfaceVariant": "#2A332D",
+      "onSurfaceVariant": "#B7C4BB",
+      "surfaceContainer": "#12211A",
+      "error": "#FFB4AB",
+      "onError": "#690005",
+      "outline": "#6C776F",
+      "outlineVariant": "#2C3A32"
+    }
+  }
+}
