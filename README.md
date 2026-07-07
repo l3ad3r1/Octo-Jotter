@@ -126,6 +126,13 @@ Plugins** (no app rebuild required — the registry is fetched live).
 - 🤝 **Submitting one:** see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the plugin PR
   checklist and review criteria.
 
+### Use it as a Second Brain
+
+With repository sync + the **Second Brain Templates** and **Second Brain Tools**
+plugins, Octo Jotter becomes a Git-backed knowledge vault (daily notes, projects,
+learnings, tasks). See the [Second Brain guide](docs/SECOND-BRAIN.md) for the
+vault structure and how it maps to a typical Obsidian setup.
+
 ## Project structure
 
 ```

@@ -1,0 +1,11 @@
+{
+  "id": "pkm-tools",
+  "name": "Second Brain Tools",
+  "version": "1.0.0",
+  "minAppVersion": "1.6",
+  "author": "l3ad3r1",
+  "description": "PKM editor commands: start a dated daily note, append a timestamp, and extract open tasks to the top.",
+  "type": "script",
+  "permissions": [],
+  "main": "function pad(n){ return (n < 10 ? \"0\" : \"\") + n; }\nfunction today(){ try { var d = new Date(); return d.getFullYear() + \"-\" + pad(d.getMonth() + 1) + \"-\" + pad(d.getDate()); } catch (e) { return \"YYYY-MM-DD\"; } }\nfunction nowStr(){ try { var d = new Date(); return today() + \" \" + pad(d.getHours()) + \":\" + pad(d.getMinutes()); } catch (e) { return \"YYYY-MM-DD HH:MM\"; } }\nocto.registerCommand(\"daily\", \"New daily note (dated)\", function(t){ var body = \"# \" + today() + \"\\n\\n## Focus\\n\\n## Tasks\\n- [ ] \\n\\n## Log\\n\\n## Captures\\n\\n\"; var s = String(t); return s.replace(/\\s/g, \"\") === \"\" ? body : body + s; });\nocto.registerCommand(\"timestamp\", \"Append timestamp\", function(t){ return String(t) + \"\\n\\n_\" + nowStr() + \"_\"; });\nocto.registerCommand(\"openTasks\", \"Extract open tasks to top\", function(t){ var lines = String(t).split(\"\\n\"); var open = []; for (var i = 0; i < lines.length; i++) { if (/^\\s*- \\[ \\]/.test(lines[i])) open.push(lines[i].replace(/^\\s+/, \"\")); } if (open.length === 0) { octo.log(\"No open tasks\"); return String(t); } return \"## Open Tasks\\n\" + open.join(\"\\n\") + \"\\n\\n\" + String(t); });"
+}

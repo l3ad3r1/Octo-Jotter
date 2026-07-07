@@ -36,12 +36,16 @@ The plugins currently in this registry — browse their manifests for reference.
 | [Text Tools](text-tools/manifest.json) | — | UPPERCASE, lowercase, Title Case, Slugify, word count. |
 | [Table of Contents](toc/manifest.json) | — | Scans headings and inserts a nested TOC at the top. |
 | [Sort Tasks](sort-tasks/manifest.json) | — | Moves completed `- [x]` items to the bottom of the note. |
+| [Second Brain Tools](pkm-tools/manifest.json) | — | Dated daily note, append timestamp, extract open tasks. |
 | [Note Actions](note-actions/manifest.json) | `notes:write` | Duplicate a note, or split its tasks into a new note. |
 
 ### Snippets
 | Plugin | Description |
 |--------|-------------|
 | [Markdown Snippets](md-snippets/manifest.json) | Callout, table, code block, task list, front-matter templates. |
+| [Second Brain Templates](second-brain/manifest.json) | Daily note, weekly review, project, meeting, retro, bug, code, learning, ADR, inbox. |
+
+> Building a knowledge vault? See the [Second Brain guide](../docs/SECOND-BRAIN.md).
 
 ---
 

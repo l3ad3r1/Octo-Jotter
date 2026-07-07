@@ -82,6 +82,15 @@
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/sort-tasks/manifest.json"
     },
     {
+      "id": "pkm-tools",
+      "name": "Second Brain Tools",
+      "author": "l3ad3r1",
+      "description": "PKM editor commands: start a dated daily note, append a timestamp, and extract open tasks to the top.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/pkm-tools/manifest.json"
+    },
+    {
       "id": "text-tools",
       "name": "Text Tools",
       "author": "l3ad3r1",
@@ -98,6 +107,15 @@
       "type": "snippet",
       "version": "1.0.0",
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/md-snippets/manifest.json"
+    },
+    {
+      "id": "second-brain",
+      "name": "Second Brain Templates",
+      "author": "l3ad3r1",
+      "description": "Building-a-Second-Brain templates: daily note, weekly review, project, meeting, retro, bug, code snippet, learning, ADR, inbox.",
+      "type": "snippet",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/second-brain/manifest.json"
     },
     {
       "id": "note-actions",

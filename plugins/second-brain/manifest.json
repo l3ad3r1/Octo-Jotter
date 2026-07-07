@@ -1,0 +1,62 @@
+{
+  "id": "second-brain",
+  "name": "Second Brain Templates",
+  "version": "1.0.0",
+  "minAppVersion": "1.7",
+  "author": "l3ad3r1",
+  "description": "Building-a-Second-Brain templates: daily note, weekly review, project, meeting, retro, bug, code snippet, learning, ADR, inbox.",
+  "type": "snippet",
+  "permissions": [],
+  "snippets": [
+    {
+      "id": "daily",
+      "name": "Daily Note",
+      "content": "# YYYY-MM-DD\n\n## 🎯 Focus\n\n## ✅ Tasks\n- [ ] \n\n## 📝 Log\n\n## 💡 Captures\n\n## 🔗 Links\n\n"
+    },
+    {
+      "id": "weekly",
+      "name": "Weekly Review",
+      "content": "# Weekly Review — Week NN\n\n## ✅ Wins\n\n## 🚧 In progress\n\n## 🧠 Learnings\n\n## 🔜 Next week\n- [ ] \n"
+    },
+    {
+      "id": "project",
+      "name": "Project",
+      "content": "# Project: \n\n**Status:** #active\n**Goal:** \n\n## Milestones\n- [ ] \n\n## Notes\n\n## Meetings\n\n## References\n\n"
+    },
+    {
+      "id": "meeting",
+      "name": "Meeting Notes",
+      "content": "# Meeting: \n\n**Date:** YYYY-MM-DD\n**Attendees:** \n\n## Agenda\n- \n\n## Notes\n\n## Decisions\n\n## Action items\n- [ ] \n"
+    },
+    {
+      "id": "retro",
+      "name": "Retrospective",
+      "content": "# Retrospective — \n\n## 😀 What went well\n- \n\n## 😕 What didn't\n- \n\n## 🔧 Actions\n- [ ] \n"
+    },
+    {
+      "id": "bug",
+      "name": "Bug Report",
+      "content": "# Bug: \n\n**Severity:** #bug\n**Environment:** \n\n## Steps to reproduce\n1. \n\n## Expected\n\n## Actual\n\n## Fix / Notes\n\n"
+    },
+    {
+      "id": "code",
+      "name": "Code Snippet",
+      "content": "# Snippet: \n\n**Language:** \n**Tags:** #snippet\n\n```\n\n```\n\n**Why / when to use:**\n\n"
+    },
+    {
+      "id": "learning",
+      "name": "Learning / Book Notes",
+      "content": "# Learning: \n\n**Source:** \n**Tags:** #learning\n\n## Key takeaways\n- \n\n## Quotes\n> \n\n## How I'll apply it\n- [ ] \n"
+    },
+    {
+      "id": "adr",
+      "name": "Architecture Decision Record",
+      "content": "# ADR NNN: \n\n**Status:** proposed\n**Date:** YYYY-MM-DD\n\n## Context\n\n## Decision\n\n## Consequences\n\n## Alternatives considered\n\n"
+    },
+    {
+      "id": "inbox",
+      "name": "Inbox Capture",
+      "content": "- [ ] CAPTURE:  #inbox\n"
+    }
+  ]
+}
