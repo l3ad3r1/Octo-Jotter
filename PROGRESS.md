@@ -18,9 +18,119 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 - Published GitHub Release v1.0 with app-release.apk:
   https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.0
 
-## Status: v1.0 shipped; now on UI/UX design pass
-v1.0 work complete. Design critique delivered as a Google Doc (23 findings:
-8 High / 10 Medium / 5 Low).
+## Status: v2.3+ (HEAD `e711b42` "Add in-app task board" is past v2.3 tag)
+Plugin ecosystem shipped (Phases 1–4 + dataview API), privacy sync landed in
+v2.0, in-app task board is the latest unreleased feature.
+
+### v1.5 SHIPPED (2026-07-07) — community-plugin foundation (Phase 1)
+- versionCode 6 / versionName 1.5; signed with the v1.3 key.
+- Plugin platform: PluginModels (manifest+registry), PluginRepository
+  (fetch/install/enable/uninstall, one active theme), data/local PluginEntity +
+  PluginDao, DB v8 MIGRATION_7_8. Theme engine ThemeSpec→ColorScheme; MainActivity
+  applies the enabled theme plugin. CommunityPluginsScreen (Browse/Installed);
+  Settings → Community Plugins card + nav route. Samples: Ocean Dark, Rose Light.
+- NOTE: minAppVersion metadata only (not enforced yet).
+
+### v1.6 SHIPPED (2026-07-07) — Phase 2 JS scripting (Rhino)
+- versionCode 7 / versionName 1.6.
+- Engine: Mozilla Rhino 1.7.14 (org.mozilla:rhino), opt level -1, no native .so.
+- ScriptEngine.kt: sealed safe scope + ClassShutter denying all Java classes +
+  5M-instruction budget via SandboxContextFactory; Mutex-confined. Plugin API
+  (JS): `octo.registerCommand(id, name, fn)` where `fn(text)->text`. Manifest
+  gains `main` (inline JS) + PluginTypes.SCRIPT. Editor toolbar has a
+  plugin-commands dropdown. Sample: Text Tools (UPPERCASE/lowercase/Title
+  Case/Slugify/word count).
+
+### v1.7 SHIPPED (2026-07-07) — Phase 3 (consent + snippets + minAppVersion)
+- versionCode 8 / versionName 1.7.
+- minAppVersion ENFORCED on install (PluginRepository.install + meetsMinVersion).
+- Permission consent dialog before install (RegistryEntry.permissions) — samples
+  declare none, so it's groundwork; fires for future permission-declaring plugins.
+- New **snippet** plugin type: manifest snippets[] (id/name/content) inserted at
+  the cursor via the editor plugin dropdown (commands+snippets unified, Bolt vs
+  Bookmark icons). Sample: Markdown Snippets (callout/table/code/tasks/frontmatter).
+
+### v1.8 SHIPPED (2026-07-07) — Phase 4 (permission-gated APIs)
+- versionCode 9 / versionName 1.8.
+- PluginHost bridge (createNote/listNoteTitles/log) → later: listNotes /
+  searchNotes / notesWithTag / openTasks.
+- PluginPermissions: notes:read, notes:write (+describe()). ScriptEngine now
+  carries per-plugin GRANTED permissions; octo.notes.create [notes:write],
+  octo.notes.list [notes:read], octo.log [none]. requirePermission() throws
+  to JS when an ungranted API is called = REAL enforcement.
+- Sample: Note Actions (script, notes:write) — "Duplicate as new note" /
+  "Send tasks to new note".
+
+### v1.9 SHIPPED (2026-07-07) — updater fix, hidden logs, nested drawer, repo discovery
+- versionCode 10 / versionName 1.9.
+- In-app APK downloader (OkHttp stream → filesDir/updates → FileProvider install
+  intent, REQUEST_INSTALL_PACKAGES) replaces open-in-browser. Progress % + logging
+  + browser fallback. DownloadStatus in VM.
+- Hidden Debug Logs screen: tap "Current version" 7× (versionTaps) → nav
+  "debuglogs" → DebugLogScreen reads `logcat -d` (own UID), copy/share.
+- Nested drawer: NoteEntity.locationPath = repo-name + folders; buildFolderTree
+  uses locationPath. Repo discovery getUserRepos with affiliation pagination.
+NOTE: v1.8 users update via the OLD browser updater to GET v1.9; the in-app
+downloader takes effect from v1.9 onward.
+
+### v2.0 SHIPPED (2026-07-07) — privacy sync + app lock + note media
+- versionCode 11 / versionName 2.0.
+- NoteEntity gains: locked, encrypted, encryptionVersion, remoteUpdatedAt,
+  lastSyncedContentHash, conflictState, conflictedRemoteContent,
+  conflictedRemoteModifiedAt. AppDatabase v9 (additive).
+- AppLockPreferences (DataStore) + AppLockScreen (BiometricPrompt) + ViewModel
+  setAppLockEnabled / markAppUnlocked / lockApp. MainActivity routes through
+  AppLockScreen when lock is enabled.
+- Editor media features (NoteApp.kt + ~750 line diff) — image/paste handling,
+  encryption integration.
+- 1431-line privacy sync overhaul (NoteRepository) including conflict
+  resolution, encrypted-content hashing, and SHA-based three-way merge.
+
+### v2.1 SHIPPED (2026-07-07) — themes: Daybreak + Midnight OLED
+- versionCode 12 / versionName 2.1.
+- Daybreak: warm golden-hour light theme. Midnight OLED: true-black (#000000)
+  variant of Midnight for OLED battery saving. Both fetched live from
+  plugins/registry.json on main.
+
+### v2.2 SHIPPED (2026-07-07) — themes + TOC script + CONTRIBUTING
+- versionCode 13 / versionName 2.2.
+- Emerald (forest-green dark), Amber (warm golden dark) themes.
+- Table of Contents script plugin: scans Markdown headings and inserts a
+  nested TOC at the cursor.
+- CONTRIBUTING.md with a plugin PR checklist, validation steps, and review
+  criteria; linked from README.
+
+### v2.3 SHIPPED (2026-07-07) — docs + plugin authoring guide
+- versionCode 14 / versionName 2.3.
+- Detailed plugin authoring guide (plugins/README.md).
+- Sort Tasks script plugin (octo.notes.openTasks → sorted output).
+- Starter template plugin for new authors; Emerald, Amber themes already
+  shipped in v2.2.
+- Plugin gallery index added to the Second-Brain guide; "Add in-app task
+  board" + "Add Dataview-style plugin note queries" (see below) landed
+  on top of v2.3 and are NOT YET released.
+
+### Unreleased (HEAD = `e711b42`, past v2.3 tag)
+- **Dataview-style plugin note queries** (`cf95eb1`): PluginHost extended
+  with listNotes() / searchNotes(q) / notesWithTag(tag) / openTasks(); all
+  gated on notes:read. ScriptEngine grants the new APIs per permission.
+  New sample plugin `task-dashboard` uses these to power a custom view.
+  docs/SECOND-BRAIN.md describes the query API.
+- **In-app task board** (`e711b42`): Built-in screen that aggregates all
+  open `- [ ]` items from notes (parseTaskBoardItems / TaskBoardItem),
+  three columns (Overdue / Today / Later, sorted by lastModifiedLocally),
+  tap-to-toggle via setTaskChecked(noteId, lineNumber, checked). Reachable
+  from the notes-list top bar; documented in docs/SECOND-BRAIN.md.
+NEXT: decide on the next version number, build + sign the release APK,
+publish to GitHub Releases (use existing my-upload-key.jks, cert SHA-256
+`640a69ce...`), and bump versionCode. Likely v2.4 unless we group the
+two unreleased features as a v3.0.
+
+### Untracked junk (not part of repo)
+- `OctoJotter-v2.1.apk`, `OctoJotter-v2.2.apk`, `OctoJotter-v2.3.apk` —
+  downloaded release assets, ignored.
+- `Polsia-Ai/` — separate project (own PROGRESS.md / SKILL.md / agents
+  / scripts / state). Dropped in this checkout; do NOT commit or move.
 
 ### Design improvements in progress (against the critique)
 - DONE Phase 1: octopus-blue Material 3 theme (light + dark) in Color.kt/Theme.kt;
