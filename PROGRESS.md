@@ -110,7 +110,12 @@ downloader takes effect from v1.9 onward.
   board" + "Add Dataview-style plugin note queries" (see below) landed
   on top of v2.3 and are NOT YET released.
 
-### Unreleased (HEAD = `e711b42`, past v2.3 tag)
+### v2.4 SHIPPED (2026-07-07) — Dataview queries + in-app Task Board
+- versionCode 15 / versionName 2.4. Signed with the v1.3+ upload key
+  (cert SHA-256 640a69ce...) so v2.3 installs update in place.
+- Release: https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v2.4
+  (asset: OctoJotter-v2.4.apk, 20.3 MB, marked Latest).
+- Rolls up the two unreleased features that landed on top of v2.3:
 - **Dataview-style plugin note queries** (`cf95eb1`): PluginHost extended
   with listNotes() / searchNotes(q) / notesWithTag(tag) / openTasks(); all
   gated on notes:read. ScriptEngine grants the new APIs per permission.
@@ -118,13 +123,9 @@ downloader takes effect from v1.9 onward.
   docs/SECOND-BRAIN.md describes the query API.
 - **In-app task board** (`e711b42`): Built-in screen that aggregates all
   open `- [ ]` items from notes (parseTaskBoardItems / TaskBoardItem),
-  three columns (Overdue / Today / Later, sorted by lastModifiedLocally),
-  tap-to-toggle via setTaskChecked(noteId, lineNumber, checked). Reachable
-  from the notes-list top bar; documented in docs/SECOND-BRAIN.md.
-NEXT: decide on the next version number, build + sign the release APK,
-publish to GitHub Releases (use existing my-upload-key.jks, cert SHA-256
-`640a69ce...`), and bump versionCode. Likely v2.4 unless we group the
-two unreleased features as a v3.0.
+  two columns (Open / Done, sorted by lastModifiedLocally), tap-to-toggle
+  via setTaskChecked(noteId, lineNumber, checked). Reachable from the
+  notes-list top bar; documented in docs/SECOND-BRAIN.md.
 
 ### Untracked junk (not part of repo)
 - `OctoJotter-v2.1.apk`, `OctoJotter-v2.2.apk`, `OctoJotter-v2.3.apk` —
