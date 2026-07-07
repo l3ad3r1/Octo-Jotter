@@ -1,0 +1,34 @@
+{
+  "id": "midnight-oled",
+  "name": "Midnight OLED",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "A true-black OLED variant of Midnight — pure #000000 surfaces with periwinkle accents to save battery.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#AEB7FF",
+      "onPrimary": "#141C51",
+      "primaryContainer": "#2C3576",
+      "onPrimaryContainer": "#DEE0FF",
+      "secondary": "#BFC3E8",
+      "onSecondary": "#282D49",
+      "secondaryContainer": "#3E4361",
+      "onSecondaryContainer": "#DBE0FF",
+      "background": "#000000",
+      "onBackground": "#E6E1F0",
+      "surface": "#000000",
+      "onSurface": "#E6E1F0",
+      "surfaceVariant": "#1C1C22",
+      "onSurfaceVariant": "#C5C6D6",
+      "surfaceContainer": "#0A0A0F",
+      "error": "#FFB4AB",
+      "onError": "#690005",
+      "outline": "#8E90A0",
+      "outlineVariant": "#2A2A30"
+    }
+  }
+}

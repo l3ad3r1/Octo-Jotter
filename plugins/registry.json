@@ -28,6 +28,24 @@
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/midnight/manifest.json"
     },
     {
+      "id": "midnight-oled",
+      "name": "Midnight OLED",
+      "author": "l3ad3r1",
+      "description": "A true-black OLED variant of Midnight — pure #000000 surfaces with periwinkle accents to save battery.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/midnight-oled/manifest.json"
+    },
+    {
+      "id": "daybreak",
+      "name": "Daybreak",
+      "author": "l3ad3r1",
+      "description": "A warm light theme washed in golden-hour amber — the sunrise companion to Midnight.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/daybreak/manifest.json"
+    },
+    {
       "id": "text-tools",
       "name": "Text Tools",
       "author": "l3ad3r1",
