@@ -14,6 +14,7 @@ import com.l3ad3r1.octojotter.data.local.DraftEntity
 import com.l3ad3r1.octojotter.data.remote.RetrofitClient
 import com.l3ad3r1.octojotter.data.remote.TokenManager
 import com.l3ad3r1.octojotter.data.repository.NoteRepository
+import com.l3ad3r1.octojotter.data.repository.NoteRevision
 import com.l3ad3r1.octojotter.sync.SyncWorker
 import android.content.Context
 import android.net.ConnectivityManager
@@ -48,6 +49,21 @@ enum class SyncState {
     Offline
 }
 
+data class SyncHealth(
+    val activeNotes: Int = 0,
+    val pendingSync: Int = 0,
+    val conflicts: Int = 0,
+    val trash: Int = 0,
+    val lastMessage: String? = null
+)
+
+sealed class HistoryState {
+    object Idle : HistoryState()
+    object Loading : HistoryState()
+    data class Loaded(val revisions: List<NoteRevision>) : HistoryState()
+    data class Error(val message: String) : HistoryState()
+}
+
 sealed class UpdateStatus {
     object Idle : UpdateStatus()
     object Checking : UpdateStatus()
@@ -75,6 +91,30 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val githubApiService = RetrofitClient.githubApiService
     private val tokenManager = TokenManager(application)
     private val repository = NoteRepository(noteDao, githubApiService, tokenManager)
+    private val appLockPreferences = com.l3ad3r1.octojotter.data.local.AppLockPreferences(application)
+
+    val appLockEnabled: StateFlow<Boolean> = appLockPreferences.appLockEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    private val _appUnlocked = MutableStateFlow(false)
+    val appUnlocked: StateFlow<Boolean> = _appUnlocked.asStateFlow()
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            appLockPreferences.setAppLockEnabled(enabled)
+            _appUnlocked.value = !enabled
+        }
+    }
+
+    fun markAppUnlocked() {
+        _appUnlocked.value = true
+    }
+
+    fun lockApp() {
+        if (appLockEnabled.value) {
+            _appUnlocked.value = false
+        }
+    }
 
     // Manual Theme preferences
     private val themePreferences = com.l3ad3r1.octojotter.data.local.ThemePreferences(application)
@@ -509,6 +549,12 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     val allNotesForFolders: StateFlow<List<NoteEntity>> =
         repository.allNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val trashNotes: StateFlow<List<NoteEntity>> =
+        repository.trashNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val conflictedNotes: StateFlow<List<NoteEntity>> =
+        repository.conflictedNotes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Combine custom folders and actual note folders
     val allFolders: StateFlow<List<String>> = combine(customFolders, allNotes) { custom, notes ->
         val used = notes.flatMap { it.folderPath }.filter { it.isNotBlank() }
@@ -661,6 +707,22 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val _syncMessage = MutableStateFlow<String?>(null)
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
 
+    val syncHealth: StateFlow<SyncHealth> = combine(
+        repository.allNotes,
+        repository.pendingSyncCount,
+        repository.conflictCount,
+        repository.trashCount,
+        _syncMessage
+    ) { notes, pending, conflicts, trash, message ->
+        SyncHealth(
+            activeNotes = notes.size,
+            pendingSync = pending,
+            conflicts = conflicts,
+            trash = trash,
+            lastMessage = message
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SyncHealth())
+
     // Editor States
     private val _editingNote = MutableStateFlow<NoteEntity?>(null)
     val editingNote: StateFlow<NoteEntity?> = _editingNote.asStateFlow()
@@ -676,6 +738,12 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _pendingDraft = MutableStateFlow<DraftEntity?>(null)
     val pendingDraft: StateFlow<DraftEntity?> = _pendingDraft.asStateFlow()
+
+    private val _historyState = MutableStateFlow<HistoryState>(HistoryState.Idle)
+    val historyState: StateFlow<HistoryState> = _historyState.asStateFlow()
+
+    private val _revisionPreview = MutableStateFlow<String?>(null)
+    val revisionPreview: StateFlow<String?> = _revisionPreview.asStateFlow()
 
     private var autoSaveJob: Job? = null
     private var draftSaveJob: Job? = null
@@ -852,10 +920,116 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // Delete a note
     fun deleteNote(note: NoteEntity) {
         viewModelScope.launch {
-            val result = repository.deleteNoteAndGist(note)
-            if (result.isFailure) {
-                _syncMessage.value = "Failed to delete Gist on GitHub: ${result.exceptionOrNull()?.message}"
+            repository.moveNoteToTrash(note)
+            _syncMessage.value = "Moved \"${note.displayTitle.ifBlank { "Untitled Note" }}\" to Trash."
+        }
+    }
+
+    fun createNoteFromShare(title: String, sharedText: String) {
+        viewModelScope.launch {
+            val clippedAt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val content = buildString {
+                append(sharedText)
+                append("\n\n---\n")
+                append("Captured with Octo Jotter on ")
+                append(clippedAt)
             }
+            val newNote = NoteEntity(
+                title = title.ifBlank { "Shared note" },
+                content = content,
+                folder = "Inbox",
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = true
+            )
+            repository.insertNote(newNote)
+            _syncMessage.value = "Captured shared text to Inbox."
+            triggerBackgroundSync()
+        }
+    }
+
+    fun restoreNote(note: NoteEntity) {
+        viewModelScope.launch {
+            repository.restoreNoteFromTrash(note)
+            _syncMessage.value = "Restored \"${note.displayTitle.ifBlank { "Untitled Note" }}\"."
+            triggerBackgroundSync()
+        }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            repository.emptyTrash()
+            _syncMessage.value = "Trash emptied."
+        }
+    }
+
+    fun toggleLockNote(note: NoteEntity) {
+        viewModelScope.launch {
+            repository.setNoteLocked(note, !note.locked)
+            val updated = note.copy(locked = !note.locked)
+            if (_editingNote.value?.id == note.id) {
+                _editingNote.value = updated
+            }
+        }
+    }
+
+    fun loadNoteHistory(noteId: Int) {
+        viewModelScope.launch {
+            _historyState.value = HistoryState.Loading
+            _revisionPreview.value = null
+            val note = repository.getNoteById(noteId)
+            if (note == null) {
+                _historyState.value = HistoryState.Error("Note not found.")
+                return@launch
+            }
+            repository.getNoteHistory(note)
+                .onSuccess { _historyState.value = HistoryState.Loaded(it) }
+                .onFailure { _historyState.value = HistoryState.Error(it.message ?: "Couldn't load history.") }
+        }
+    }
+
+    fun previewRevision(noteId: Int, revisionId: String) {
+        viewModelScope.launch {
+            val note = repository.getNoteById(noteId) ?: return@launch
+            repository.getRevisionContent(note, revisionId)
+                .onSuccess { _revisionPreview.value = it }
+                .onFailure { _syncMessage.value = "Couldn't load revision: ${it.message}" }
+        }
+    }
+
+    fun restoreRevision(noteId: Int, revisionId: String) {
+        viewModelScope.launch {
+            val note = repository.getNoteById(noteId) ?: return@launch
+            repository.restoreRevision(note, revisionId)
+                .onSuccess {
+                    _syncMessage.value = "Revision restored. It will sync on the next push."
+                    loadNote(noteId)
+                    triggerBackgroundSync()
+                }
+                .onFailure { _syncMessage.value = "Couldn't restore revision: ${it.message}" }
+        }
+    }
+
+    fun resolveConflictKeepLocal(note: NoteEntity) {
+        viewModelScope.launch {
+            repository.resolveConflictKeepLocal(note)
+            _syncMessage.value = "Keeping local copy for ${note.displayTitle.ifBlank { "Untitled Note" }}."
+            triggerBackgroundSync()
+        }
+    }
+
+    fun resolveConflictUseRemote(note: NoteEntity) {
+        viewModelScope.launch {
+            repository.resolveConflictUseRemote(note)
+            _syncMessage.value = "Using remote copy for ${note.displayTitle.ifBlank { "Untitled Note" }}."
+        }
+    }
+
+    fun resolveConflictSaveBoth(note: NoteEntity) {
+        viewModelScope.launch {
+            repository.resolveConflictSaveBoth(note)
+            _syncMessage.value = "Saved both copies for ${note.displayTitle.ifBlank { "Untitled Note" }}."
+            triggerBackgroundSync()
         }
     }
 
@@ -867,15 +1041,14 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             _syncMessage.value = "Syncing..."
             val errors = mutableListOf<String>()
 
-            // Gist notes
-            repository.pushToGithub().onFailure { errors.add("Gist push: ${it.message}") }
             repository.pullFromGithub().onFailure { errors.add("Gist pull: ${it.message}") }
+            repository.pushToGithub().onFailure { errors.add("Gist push: ${it.message}") }
 
             // Selected repository (if any)
             val repoPath = selectedRepository.value
             if (!repoPath.isNullOrBlank()) {
-                repository.pushToRepository(repoPath).onFailure { errors.add("Repo push: ${it.message}") }
                 repository.pullFromRepository(repoPath).onFailure { errors.add("Repo pull: ${it.message}") }
+                repository.pushToRepository(repoPath).onFailure { errors.add("Repo push: ${it.message}") }
             }
 
             _isSyncing.value = false

@@ -20,7 +20,17 @@ data class NoteEntity(
     // is the blob SHA of the last-synced version (used for conflict-safe PUTs).
     val repository: String? = null,
     val path: String? = null,
-    val sha: String? = null
+    val sha: String? = null,
+    val deletedAt: Long? = null,
+    val pendingRemoteDelete: Boolean = false,
+    val locked: Boolean = false,
+    val encrypted: Boolean = false,
+    val encryptionVersion: Int = 0,
+    val remoteUpdatedAt: String? = null,
+    val lastSyncedContentHash: String? = null,
+    val conflictState: String? = null,
+    val conflictedRemoteContent: String? = null,
+    val conflictedRemoteModifiedAt: Long? = null
 ) {
     val folderPath: List<String>
         get() = if (title.contains("__")) {

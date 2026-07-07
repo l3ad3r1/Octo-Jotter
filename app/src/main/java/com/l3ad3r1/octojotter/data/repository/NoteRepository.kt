@@ -15,8 +15,17 @@ import com.l3ad3r1.octojotter.data.remote.TokenManager
 import android.util.Base64
 import kotlinx.coroutines.flow.Flow
 import java.io.IOException
+import java.security.MessageDigest
 
 private const val MAX_REPO_PAGES = 20
+private const val CONFLICT_STATE = "CONFLICT"
+
+data class NoteRevision(
+    val id: String,
+    val label: String,
+    val committedAt: String?,
+    val summary: String?
+)
 
 class NoteRepository(
     private val noteDao: NoteDao,
@@ -24,7 +33,12 @@ class NoteRepository(
     private val tokenManager: TokenManager
 ) {
     val allNotes: Flow<List<NoteEntity>> = noteDao.getAllNotesFlow()
+    val trashNotes: Flow<List<NoteEntity>> = noteDao.getTrashNotesFlow()
     val allTagsFlow: Flow<List<TagEntity>> = noteDao.getAllTagsFlow()
+    val trashCount: Flow<Int> = noteDao.getTrashCountFlow()
+    val pendingSyncCount: Flow<Int> = noteDao.getPendingSyncCountFlow()
+    val conflictCount: Flow<Int> = noteDao.getConflictCountFlow()
+    val conflictedNotes: Flow<List<NoteEntity>> = noteDao.getConflictedNotesFlow()
 
     fun searchNotes(query: String): Flow<List<NoteEntity>> {
         return noteDao.searchNotesFlow("%$query%")
@@ -74,6 +88,76 @@ class NoteRepository(
 
     suspend fun deleteNote(note: NoteEntity) {
         noteDao.delete(note)
+    }
+
+    suspend fun moveNoteToTrash(note: NoteEntity) {
+        val hasRemote = !note.gistId.isNullOrEmpty() || (!note.repository.isNullOrEmpty() && !note.path.isNullOrEmpty())
+        noteDao.moveToTrash(
+            id = note.id,
+            deletedAt = System.currentTimeMillis(),
+            pendingRemoteDelete = hasRemote
+        )
+    }
+
+    suspend fun restoreNoteFromTrash(note: NoteEntity) {
+        noteDao.restoreFromTrash(note.id)
+    }
+
+    suspend fun emptyTrash() {
+        noteDao.emptyTrash()
+    }
+
+    suspend fun setNoteLocked(note: NoteEntity, locked: Boolean) {
+        noteDao.setLocked(note.id, locked)
+    }
+
+    suspend fun resolveConflictKeepLocal(note: NoteEntity) {
+        noteDao.update(
+            note.copy(
+                needsSync = true,
+                conflictState = null,
+                conflictedRemoteContent = null,
+                conflictedRemoteModifiedAt = null,
+                lastModifiedLocally = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun resolveConflictUseRemote(note: NoteEntity) {
+        val remote = note.conflictedRemoteContent ?: return
+        noteDao.update(
+            note.copy(
+                content = remote,
+                needsSync = false,
+                conflictState = null,
+                conflictedRemoteContent = null,
+                conflictedRemoteModifiedAt = null,
+                lastSyncedContentHash = hashContent(remote),
+                lastModifiedLocally = System.currentTimeMillis()
+            )
+        )
+        scanAndExtractTags(note.id, remote)
+    }
+
+    suspend fun resolveConflictSaveBoth(note: NoteEntity): Long {
+        val remote = note.conflictedRemoteContent ?: ""
+        val copyId = noteDao.insert(
+            note.copy(
+                id = 0,
+                gistId = null,
+                sha = null,
+                title = "${note.title.ifBlank { "Untitled" }} (remote copy)",
+                content = remote,
+                needsSync = true,
+                conflictState = null,
+                conflictedRemoteContent = null,
+                conflictedRemoteModifiedAt = null,
+                lastModifiedLocally = System.currentTimeMillis()
+            )
+        )
+        resolveConflictKeepLocal(note)
+        scanAndExtractTags(copyId.toInt(), remote)
+        return copyId
     }
 
     suspend fun getDraftByNoteId(noteId: Int): DraftEntity? {
@@ -126,6 +210,109 @@ class NoteRepository(
         noteDao.deleteById(id)
     }
 
+    suspend fun getNoteHistory(note: NoteEntity): Result<List<NoteRevision>> {
+        val token = tokenManager.getToken()
+            ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
+        val formattedToken = "Bearer $token"
+        return try {
+            if (!note.repository.isNullOrBlank() && !note.path.isNullOrBlank()) {
+                val (owner, repo) = parseRepoPath(note.repository).getOrElse { return Result.failure(it) }
+                val response = githubApiService.getRepoCommitsForPath(
+                    formattedToken,
+                    owner,
+                    repo,
+                    note.path
+                )
+                if (!response.isSuccessful) {
+                    return Result.failure(IOException("Failed to load history (${response.code()})"))
+                }
+                Result.success(
+                    response.body().orEmpty().map { commit ->
+                        NoteRevision(
+                            id = commit.sha,
+                            label = commit.sha.take(7),
+                            committedAt = commit.commit?.author?.date,
+                            summary = commit.commit?.message
+                        )
+                    }
+                )
+            } else {
+                val gistId = note.gistId
+                    ?: return Result.failure(Exception("This note has not been synced yet."))
+                val response = githubApiService.getGist(formattedToken, gistId)
+                if (!response.isSuccessful) {
+                    return Result.failure(IOException("Failed to load history (${response.code()})"))
+                }
+                Result.success(
+                    response.body()?.history.orEmpty().mapNotNull { entry ->
+                        val version = entry.version ?: return@mapNotNull null
+                        NoteRevision(
+                            id = version,
+                            label = version.take(7),
+                            committedAt = entry.committedAt,
+                            summary = entry.changeStatus?.let {
+                                "+${it.additions ?: 0} -${it.deletions ?: 0}"
+                            }
+                        )
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getRevisionContent(note: NoteEntity, revisionId: String): Result<String> {
+        val token = tokenManager.getToken()
+            ?: return Result.failure(Exception("No GitHub token saved. Please add one in Settings."))
+        val formattedToken = "Bearer $token"
+        return try {
+            if (!note.repository.isNullOrBlank() && !note.path.isNullOrBlank()) {
+                val (owner, repo) = parseRepoPath(note.repository).getOrElse { return Result.failure(it) }
+                val response = githubApiService.getRepoFileContent(
+                    formattedToken,
+                    owner,
+                    repo,
+                    encodeRepoPath(note.path),
+                    revisionId
+                )
+                if (!response.isSuccessful) {
+                    return Result.failure(IOException("Failed to load revision (${response.code()})"))
+                }
+                val encoded = response.body()?.content
+                    ?: return Result.failure(IOException("Revision has no content."))
+                Result.success(decodeBase64Text(encoded))
+            } else {
+                val gistId = note.gistId
+                    ?: return Result.failure(Exception("This note has not been synced yet."))
+                val response = githubApiService.getGistRevision(formattedToken, gistId, revisionId)
+                if (!response.isSuccessful) {
+                    return Result.failure(IOException("Failed to load revision (${response.code()})"))
+                }
+                val file = response.body()?.files?.values?.firstOrNull {
+                    it.filename?.endsWith(".md", ignoreCase = true) == true
+                }
+                Result.success(file?.content.orEmpty())
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun restoreRevision(note: NoteEntity, revisionId: String): Result<Unit> {
+        return getRevisionContent(note, revisionId).mapCatching { content ->
+            val updated = note.copy(
+                content = content,
+                needsSync = true,
+                conflictState = null,
+                conflictedRemoteContent = null,
+                conflictedRemoteModifiedAt = null,
+                lastModifiedLocally = System.currentTimeMillis()
+            )
+            updateNote(updated)
+        }
+    }
+
     // ---------------------------------------------------------------------
     // Repository (folder-based) two-way sync — GitHub Contents/Git Data API
     // ---------------------------------------------------------------------
@@ -150,6 +337,31 @@ class NoteRepository(
                 .replace("+", "%20")
                 .replace("%2F", "/")
         }
+
+    private fun hashContent(content: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(content.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private suspend fun markConflict(
+        note: NoteEntity,
+        remoteContent: String,
+        remoteModifiedAt: Long = System.currentTimeMillis(),
+        remoteSha: String? = null
+    ) {
+        noteDao.update(
+            note.copy(
+                sha = remoteSha ?: note.sha,
+                conflictState = CONFLICT_STATE,
+                conflictedRemoteContent = remoteContent,
+                conflictedRemoteModifiedAt = remoteModifiedAt,
+                needsSync = false
+            )
+        )
+    }
+
+    private fun decodeBase64Text(encoded: String): String =
+        String(Base64.decode(encoded.replace("\n", ""), Base64.DEFAULT), Charsets.UTF_8)
 
     /** List "owner/repo" for every repository the token can access, across all pages. */
     suspend fun listAccessibleRepositories(): Result<List<String>> {
@@ -214,7 +426,7 @@ class NoteRepository(
                 val blobResponse = githubApiService.getGitBlob(formattedToken, owner, repo, entry.sha)
                 if (!blobResponse.isSuccessful) continue
                 val encoded = blobResponse.body()?.content ?: continue
-                val decoded = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
+                val decoded = decodeBase64Text(encoded)
                 // Title mirrors the app's PARA folder convention (path "/" -> "__").
                 val title = entry.path.removeSuffix(".md").replace("/", "__")
 
@@ -228,9 +440,12 @@ class NoteRepository(
                             path = entry.path,
                             sha = entry.sha,
                             needsSync = false,
+                            lastSyncedContentHash = hashContent(decoded),
                             lastModifiedLocally = System.currentTimeMillis()
                         )
                     )
+                } else if (existing.needsSync && existing.content != decoded) {
+                    markConflict(existing, decoded, remoteSha = entry.sha)
                 } else if (!existing.needsSync) {
                     noteDao.update(
                         existing.copy(
@@ -238,6 +453,10 @@ class NoteRepository(
                             content = decoded,
                             sha = entry.sha,
                             needsSync = false,
+                            conflictState = null,
+                            conflictedRemoteContent = null,
+                            conflictedRemoteModifiedAt = null,
+                            lastSyncedContentHash = hashContent(decoded),
                             lastModifiedLocally = System.currentTimeMillis()
                         )
                     )
@@ -276,15 +495,32 @@ class NoteRepository(
                     )
                 )
 
-                var response = put(note.sha)
-                // 409/422 = stale sha; retry as a fresh create/update without sha.
+                val response = put(note.sha)
                 if (response.code() == 409 || response.code() == 422) {
-                    response = put(null)
+                    val remote = githubApiService.getRepoFileContent(
+                        formattedToken, owner, repo, encodedPath, null
+                    )
+                    val remoteBody = remote.body()
+                    val remoteContent = remoteBody?.content?.let { decodeBase64Text(it) }
+                    if (remoteContent != null) {
+                        markConflict(note, remoteContent, remoteSha = remoteBody.sha)
+                    }
+                    return Result.failure(IOException("Conflict detected for ${note.title}. Resolve it in Sync Health."))
                 }
 
                 if (response.isSuccessful) {
                     val newSha = response.body()?.content?.sha
-                    noteDao.update(note.copy(path = rawPath, sha = newSha, needsSync = false))
+                    noteDao.update(
+                        note.copy(
+                            path = rawPath,
+                            sha = newSha,
+                            needsSync = false,
+                            conflictState = null,
+                            conflictedRemoteContent = null,
+                            conflictedRemoteModifiedAt = null,
+                            lastSyncedContentHash = hashContent(note.content)
+                        )
+                    )
                 } else {
                     return Result.failure(IOException("Failed to upload ${note.title} (${response.code()})"))
                 }
@@ -353,15 +589,24 @@ class NoteRepository(
                                     gistId = gist.id,
                                     title = title,
                                     content = content,
+                                    remoteUpdatedAt = fullGist?.updatedAt ?: gist.updatedAt,
+                                    lastSyncedContentHash = hashContent(content),
                                     lastModifiedLocally = System.currentTimeMillis(),
                                     needsSync = false
                                 )
                             )
+                        } else if (existingNote.needsSync && existingNote.content != content) {
+                            markConflict(existingNote, content)
                         } else if (!existingNote.needsSync) {
                             noteDao.update(
                                 existingNote.copy(
                                     title = title,
                                     content = content,
+                                    remoteUpdatedAt = fullGist?.updatedAt ?: gist.updatedAt,
+                                    lastSyncedContentHash = hashContent(content),
+                                    conflictState = null,
+                                    conflictedRemoteContent = null,
+                                    conflictedRemoteModifiedAt = null,
                                     lastModifiedLocally = System.currentTimeMillis(),
                                     needsSync = false
                                 )
@@ -383,6 +628,7 @@ class NoteRepository(
         return try {
             val notesToSync = noteDao.getNotesToSync()
             for (note in notesToSync) {
+                if (note.conflictState == CONFLICT_STATE) continue
                 val filename = "${note.title.ifBlank { "Untitled" }}.md"
                 val fileRequest = GistFileRequest(content = note.content)
                 val filesMap = mapOf(filename to fileRequest)
@@ -400,7 +646,9 @@ class NoteRepository(
                             noteDao.update(
                                 note.copy(
                                     gistId = createdGist.id,
-                                    needsSync = false
+                                    needsSync = false,
+                                    remoteUpdatedAt = createdGist.updatedAt,
+                                    lastSyncedContentHash = hashContent(note.content)
                                 )
                             )
                         }
@@ -412,7 +660,9 @@ class NoteRepository(
                     if (response.isSuccessful) {
                         noteDao.update(
                             note.copy(
-                                needsSync = false
+                                needsSync = false,
+                                remoteUpdatedAt = response.body()?.updatedAt,
+                                lastSyncedContentHash = hashContent(note.content)
                             )
                         )
                     } else if (response.code() == 404) {
@@ -423,7 +673,9 @@ class NoteRepository(
                                 noteDao.update(
                                     note.copy(
                                         gistId = createdGist.id,
-                                        needsSync = false
+                                        needsSync = false,
+                                        remoteUpdatedAt = createdGist.updatedAt,
+                                        lastSyncedContentHash = hashContent(note.content)
                                     )
                                 )
                             }

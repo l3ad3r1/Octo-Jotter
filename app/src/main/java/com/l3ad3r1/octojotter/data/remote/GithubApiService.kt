@@ -29,7 +29,22 @@ data class GistResponse(
     @Json(name = "id") val id: String,
     @Json(name = "description") val description: String?,
     @Json(name = "updated_at") val updatedAt: String?,
-    @Json(name = "files") val files: Map<String, GistFile>?
+    @Json(name = "files") val files: Map<String, GistFile>?,
+    @Json(name = "history") val history: List<GistHistoryEntry>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class GistHistoryEntry(
+    @Json(name = "version") val version: String?,
+    @Json(name = "committed_at") val committedAt: String?,
+    @Json(name = "change_status") val changeStatus: GistChangeStatus?
+)
+
+@JsonClass(generateAdapter = true)
+data class GistChangeStatus(
+    @Json(name = "total") val total: Int?,
+    @Json(name = "additions") val additions: Int?,
+    @Json(name = "deletions") val deletions: Int?
 )
 
 @JsonClass(generateAdapter = true)
@@ -72,6 +87,13 @@ interface GithubApiService {
     suspend fun getGist(
         @Header("Authorization") token: String,
         @Path("gist_id") gistId: String
+    ): Response<GistResponse>
+
+    @GET("gists/{gist_id}/{sha}")
+    suspend fun getGistRevision(
+        @Header("Authorization") token: String,
+        @Path("gist_id") gistId: String,
+        @Path("sha") sha: String
     ): Response<GistResponse>
 
     @POST("gists")
@@ -154,6 +176,24 @@ interface GithubApiService {
         @Path(value = "path", encoded = true) path: String,
         @Body request: DeleteContentRequest
     ): Response<Unit>
+
+    @GET("repos/{owner}/{repo}/commits")
+    suspend fun getRepoCommitsForPath(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Query("path") path: String,
+        @Query("per_page") perPage: Int = 30
+    ): Response<List<RepoCommitResponse>>
+
+    @GET("repos/{owner}/{repo}/contents/{path}")
+    suspend fun getRepoFileContent(
+        @Header("Authorization") token: String,
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path(value = "path", encoded = true) path: String,
+        @Query("ref") ref: String? = null
+    ): Response<RepoContentResponse>
 }
 
 // --- Repository API models ---
@@ -163,6 +203,32 @@ data class RepoSummary(
     @Json(name = "full_name") val fullName: String,
     @Json(name = "private") val private: Boolean?,
     @Json(name = "default_branch") val defaultBranch: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class RepoCommitResponse(
+    @Json(name = "sha") val sha: String,
+    @Json(name = "commit") val commit: RepoCommitInfo?
+)
+
+@JsonClass(generateAdapter = true)
+data class RepoCommitInfo(
+    @Json(name = "message") val message: String?,
+    @Json(name = "author") val author: RepoCommitAuthor?
+)
+
+@JsonClass(generateAdapter = true)
+data class RepoCommitAuthor(
+    @Json(name = "date") val date: String?
+)
+
+@JsonClass(generateAdapter = true)
+data class RepoContentResponse(
+    @Json(name = "name") val name: String?,
+    @Json(name = "path") val path: String?,
+    @Json(name = "sha") val sha: String?,
+    @Json(name = "content") val content: String?,
+    @Json(name = "encoding") val encoding: String?
 )
 
 @JsonClass(generateAdapter = true)

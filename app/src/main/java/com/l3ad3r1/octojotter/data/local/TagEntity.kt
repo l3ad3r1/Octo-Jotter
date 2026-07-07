@@ -2,6 +2,7 @@ package com.l3ad3r1.octojotter.data.local
 
 import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
@@ -13,7 +14,8 @@ data class TagEntity(
 
 @Entity(
     tableName = "note_tag_cross_ref",
-    primaryKeys = ["noteId", "tagName"]
+    primaryKeys = ["noteId", "tagName"],
+    indices = [Index(value = ["tagName"])]
 )
 data class NoteTagCrossRef(
     val noteId: Int,

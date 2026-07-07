@@ -20,11 +20,12 @@ class SyncWorker(
         val tokenManager = TokenManager(applicationContext)
         val repository = NoteRepository(noteDao, githubApiService, tokenManager)
 
-        val result = repository.pushToGithub()
-        return if (result.isSuccess) {
+        val pullResult = repository.pullFromGithub()
+        val pushResult = if (pullResult.isSuccess) repository.pushToGithub() else pullResult
+        return if (pushResult.isSuccess) {
             Result.success()
         } else {
-            val message = result.exceptionOrNull()?.message ?: ""
+            val message = pushResult.exceptionOrNull()?.message ?: ""
             if (message.contains("No GitHub token", ignoreCase = true) || message.contains("401", ignoreCase = true)) {
                 Result.failure()
             } else {

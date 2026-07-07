@@ -2,6 +2,10 @@ package com.l3ad3r1.octojotter.ui
 
 import android.app.Activity
 import android.widget.Toast
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -9,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,6 +39,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
@@ -51,10 +60,8 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
@@ -65,13 +72,11 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatStrikethrough
-import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.InsertLink
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -140,10 +145,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -157,6 +162,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
@@ -169,6 +175,13 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.ui.platform.LocalContext
 import com.l3ad3r1.octojotter.data.local.NoteEntity
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
@@ -182,6 +195,16 @@ import java.util.Locale
 @Composable
 fun NoteApp(viewModel: NoteViewModel) {
     val navController = rememberNavController()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+    val appUnlocked by viewModel.appUnlocked.collectAsState()
+
+    if (appLockEnabled && !appUnlocked) {
+        AppLockScreen(
+            onUnlock = { viewModel.markAppUnlocked() },
+            onDisableLock = { viewModel.setAppLockEnabled(false) }
+        )
+        return
+    }
 
     // Settings is a pushed screen reached from the top-bar gear, not a bottom-nav
     // destination — a 2-item bottom bar wasn't worth the permanent vertical cost.
@@ -198,6 +221,9 @@ fun NoteApp(viewModel: NoteViewModel) {
                 },
                 onNavigateToSettings = {
                     navController.navigate("settings") { launchSingleTop = true }
+                },
+                onNavigateToTrash = {
+                    navController.navigate("trash") { launchSingleTop = true }
                 }
             )
         }
@@ -211,7 +237,18 @@ fun NoteApp(viewModel: NoteViewModel) {
                 },
                 onNavigateToEditor = { newNoteId ->
                     navController.navigate("editor/$newNoteId")
+                },
+                onNavigateToHistory = {
+                    navController.navigate("history/$noteId") { launchSingleTop = true }
                 }
+            )
+        }
+        composable("history/{noteId}") { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")?.toIntOrNull() ?: -1
+            NoteHistoryScreen(
+                noteId = noteId,
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable("settings") {
@@ -219,7 +256,20 @@ fun NoteApp(viewModel: NoteViewModel) {
                 viewModel = viewModel,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlugins = { navController.navigate("plugins") { launchSingleTop = true } },
-                onNavigateToDebug = { navController.navigate("debuglogs") { launchSingleTop = true } }
+                onNavigateToDebug = { navController.navigate("debuglogs") { launchSingleTop = true } },
+                onNavigateToSyncHealth = { navController.navigate("sync_health") { launchSingleTop = true } }
+            )
+        }
+        composable("trash") {
+            TrashScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        composable("sync_health") {
+            SyncHealthScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable("plugins") {
@@ -237,12 +287,117 @@ fun NoteApp(viewModel: NoteViewModel) {
     }
 }
 
+@Composable
+fun AppLockScreen(
+    onUnlock: () -> Unit,
+    onDisableLock: () -> Unit
+) {
+    val context = LocalContext.current
+    val canAuthenticate = remember(context) {
+        BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+    }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    fun launchBiometricPrompt() {
+        val activity = context as? FragmentActivity
+        if (activity == null) {
+            message = "Biometric unlock is not available in this window."
+            return
+        }
+        val prompt = BiometricPrompt(
+            activity,
+            ContextCompat.getMainExecutor(context),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    onUnlock()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    message = errString.toString()
+                }
+
+                override fun onAuthenticationFailed() {
+                    message = "Fingerprint not recognized."
+                }
+            }
+        )
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Octo Jotter")
+            .setSubtitle("Use your fingerprint to open your notes")
+            .setNegativeButtonText("Cancel")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .build()
+        prompt.authenticate(promptInfo)
+    }
+
+    LaunchedEffect(canAuthenticate) {
+        if (canAuthenticate) launchBiometricPrompt()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Fingerprint,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = "Octo Jotter is locked",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = if (canAuthenticate) {
+                    "Unlock with your fingerprint to continue."
+                } else {
+                    "Fingerprint unlock is not set up on this device."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = { launchBiometricPrompt() },
+                enabled = canAuthenticate,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Fingerprint, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Unlock")
+            }
+            TextButton(onClick = onDisableLock) {
+                Text("Turn off app lock")
+            }
+            message?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun NotesListScreen(
     viewModel: NoteViewModel,
     onNavigateToEditor: (Int) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToTrash: () -> Unit
 ) {
     val notes by viewModel.filteredNotes.collectAsState()
     val selectedTag by viewModel.selectedTag.collectAsState()
@@ -255,6 +410,7 @@ fun NotesListScreen(
     val allFolders by viewModel.allFolders.collectAsState()
     val allNotesForFolders by viewModel.allNotesForFolders.collectAsState()
     val customFolders by viewModel.customFolders.collectAsState()
+    val syncHealth by viewModel.syncHealth.collectAsState()
     val drawerFolderExpanded = remember { mutableStateMapOf<String, Boolean>() }
 
     val scope = rememberCoroutineScope()
@@ -333,7 +489,7 @@ fun NotesListScreen(
                 
                 // All Notes selection
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Notes, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = null) },
                     label = { Text("All Notes") },
                     selected = selectedFolder == null,
                     onClick = {
@@ -353,6 +509,17 @@ fun NotesListScreen(
                         scope.launch { drawerState.close() }
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_uncategorized")
+                )
+
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    label = { Text("Trash (${syncHealth.trash})") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onNavigateToTrash()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_trash")
                 )
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -602,7 +769,7 @@ fun NotesListScreen(
                     label = { Text(if (isFolderTreeView) "Grouped" else "List") },
                     leadingIcon = {
                         Icon(
-                            imageVector = if (isFolderTreeView) Icons.Default.Folder else Icons.Default.List,
+                            imageVector = if (isFolderTreeView) Icons.Default.Folder else Icons.AutoMirrored.Filled.List,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
@@ -705,7 +872,7 @@ fun NotesListScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Notes,
+                                imageVector = Icons.AutoMirrored.Filled.Notes,
                                 contentDescription = "No notes",
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
                                 modifier = Modifier.size(96.dp)
@@ -827,12 +994,21 @@ fun NotesListScreen(
                                                 tint = if (note.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                             )
                                         }
+                                        if (note.locked) {
+                                            Icon(
+                                                imageVector = Icons.Default.Lock,
+                                                contentDescription = "Locked note",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
                                         Spacer(modifier = Modifier.width(8.dp))
                                         SyncStatusBadge(note = note)
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = note.content.ifBlank { "No content..." },
+                                        text = if (note.locked) "Locked note" else note.content.ifBlank { "No content..." },
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
@@ -846,7 +1022,7 @@ fun NotesListScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Default.Label,
+                                                imageVector = Icons.AutoMirrored.Filled.Label,
                                                 contentDescription = null,
                                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                                                 modifier = Modifier.size(14.dp)
@@ -1008,8 +1184,8 @@ fun NotesListScreen(
     if (noteToDelete != null) {
         AlertDialog(
             onDismissRequest = { noteToDelete = null },
-            title = { Text("Delete Note") },
-            text = { Text("Are you sure you want to delete this note locally? This will not delete the Gist from GitHub.") },
+            title = { Text("Move to Trash") },
+            text = { Text("This note will leave your main list and stay recoverable from Trash.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -1018,7 +1194,7 @@ fun NotesListScreen(
                     },
                     modifier = Modifier.testTag("confirm_delete_button")
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text("Move to Trash", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -1155,7 +1331,8 @@ fun EditorScreen(
     noteId: Int,
     viewModel: NoteViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToEditor: (Int) -> Unit
+    onNavigateToEditor: (Int) -> Unit,
+    onNavigateToHistory: () -> Unit
 ) {
     LaunchedEffect(noteId) {
         viewModel.loadNote(noteId)
@@ -1438,6 +1615,27 @@ fun EditorScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         note?.let { currentNote ->
                             IconButton(
+                                onClick = onNavigateToHistory,
+                                enabled = !currentNote.gistId.isNullOrBlank() || !currentNote.repository.isNullOrBlank(),
+                                modifier = Modifier.testTag("editor_history_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "Note history",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.toggleLockNote(currentNote) },
+                                modifier = Modifier.testTag("editor_lock_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (currentNote.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = if (currentNote.locked) "Unlock note" else "Lock note",
+                                    tint = if (currentNote.locked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            }
+                            IconButton(
                                 onClick = { viewModel.togglePinNote(currentNote) },
                                 modifier = Modifier.testTag("editor_pin_button")
                             ) {
@@ -1536,7 +1734,7 @@ fun EditorScreen(
                             onClick = { insertMarkdown("- ", "") },
                             modifier = Modifier.testTag("format_list_button")
                         ) {
-                            Icon(Icons.Default.FormatListBulleted, contentDescription = "Format Unordered List")
+                            Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Format Unordered List")
                         }
                         // Numbered list
                         IconButton(
@@ -1816,7 +2014,7 @@ fun EditorInputs(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Label,
+                imageVector = Icons.AutoMirrored.Filled.Label,
                 contentDescription = "Tags",
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
@@ -2091,11 +2289,470 @@ fun SaveStatusIndicator(saveStatus: SaveStatus) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+fun TrashScreen(
+    viewModel: NoteViewModel,
+    onNavigateBack: () -> Unit
+) {
+    val trashNotes by viewModel.trashNotes.collectAsState()
+    var showEmptyConfirm by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Trash", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { showEmptyConfirm = true },
+                        enabled = trashNotes.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.DeleteForever, contentDescription = "Empty trash")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { innerPadding ->
+        if (trashNotes.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Trash is empty",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(trashNotes, key = { it.id }) { note ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = note.displayTitle.ifBlank { "Untitled Note" },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Deleted ${note.deletedAt?.let { formatRelativeTimestamp(it) } ?: "recently"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { viewModel.restoreNote(note) }) {
+                                Icon(Icons.Default.RestoreFromTrash, contentDescription = "Restore note")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showEmptyConfirm) {
+        AlertDialog(
+            onDismissRequest = { showEmptyConfirm = false },
+            title = { Text("Empty Trash?") },
+            text = { Text("This permanently deletes every note currently in Trash from this device.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.emptyTrash()
+                        showEmptyConfirm = false
+                    }
+                ) {
+                    Text("Empty Trash", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEmptyConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NoteHistoryScreen(
+    noteId: Int,
+    viewModel: NoteViewModel,
+    onNavigateBack: () -> Unit
+) {
+    val historyState by viewModel.historyState.collectAsState()
+    val preview by viewModel.revisionPreview.collectAsState()
+    var selectedRevisionId by remember { mutableStateOf<String?>(null) }
+    var showRestoreConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(noteId) {
+        viewModel.loadNoteHistory(noteId)
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Note History", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { innerPadding ->
+        when (val state = historyState) {
+            HistoryState.Idle,
+            HistoryState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            is HistoryState.Error -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding).padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            is HistoryState.Loaded -> {
+                if (state.revisions.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(innerPadding),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No remote revisions found yet.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(innerPadding)
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(state.revisions, key = { it.id }) { revision ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedRevisionId = revision.id
+                                            viewModel.previewRevision(noteId, revision.id)
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (selectedRevisionId == revision.id) {
+                                            MaterialTheme.colorScheme.secondaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                        }
+                                    )
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Text(
+                                            text = revision.label,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        revision.committedAt?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        revision.summary?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        preview?.let {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "Preview",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 8,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { showRestoreConfirm = true },
+                                        enabled = selectedRevisionId != null,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(Icons.Default.RestoreFromTrash, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Restore this revision")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showRestoreConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirm = false },
+            title = { Text("Restore Revision?") },
+            text = { Text("This replaces the current note content with the selected revision and marks it for sync.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedRevisionId?.let { viewModel.restoreRevision(noteId, it) }
+                        showRestoreConfirm = false
+                    }
+                ) {
+                    Text("Restore")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SyncHealthScreen(
+    viewModel: NoteViewModel,
+    onNavigateBack: () -> Unit
+) {
+    val health by viewModel.syncHealth.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
+    val conflicts by viewModel.conflictedNotes.collectAsState()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Sync Health", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SyncStatusIndicator(syncState = syncState)
+            HealthRow("Active notes", health.activeNotes.toString(), Icons.AutoMirrored.Filled.Notes)
+            HealthRow("Pending sync", health.pendingSync.toString(), Icons.Default.CloudQueue)
+            HealthRow("Conflicts", health.conflicts.toString(), Icons.Default.History)
+            HealthRow("In Trash", health.trash.toString(), Icons.Default.Delete)
+            if (conflicts.isNotEmpty()) {
+                Text(
+                    text = "Resolve Conflicts",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                conflicts.forEach { note ->
+                    ConflictCard(
+                        note = note,
+                        onKeepLocal = { viewModel.resolveConflictKeepLocal(note) },
+                        onUseRemote = { viewModel.resolveConflictUseRemote(note) },
+                        onSaveBoth = { viewModel.resolveConflictSaveBoth(note) }
+                    )
+                }
+            }
+            health.lastMessage?.let {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Text(
+                        text = it,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Button(
+                onClick = { viewModel.syncNow() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Sync, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Run sync check")
+            }
+        }
+    }
+}
+
+@Composable
+fun ConflictCard(
+    note: NoteEntity,
+    onKeepLocal: () -> Unit,
+    onUseRemote: () -> Unit,
+    onSaveBoth: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+                Text(
+                    text = note.displayTitle.ifBlank { "Untitled Note" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Text(
+                text = "Both local and remote content changed. Choose which copy should win, or keep both.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(onClick = onKeepLocal, modifier = Modifier.weight(1f)) {
+                    Text("Local")
+                }
+                OutlinedButton(onClick = onUseRemote, modifier = Modifier.weight(1f)) {
+                    Text("Remote")
+                }
+                Button(onClick = onSaveBoth, modifier = Modifier.weight(1f)) {
+                    Text("Both")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HealthRow(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun SettingsScreen(
     viewModel: NoteViewModel,
     onNavigateBack: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
-    onNavigateToDebug: () -> Unit = {}
+    onNavigateToDebug: () -> Unit = {},
+    onNavigateToSyncHealth: () -> Unit = {}
 ) {
     // Tapping the version number 7x reveals the hidden debug log viewer.
     var versionTaps by remember { mutableStateOf(0) }
@@ -2109,6 +2766,7 @@ fun SettingsScreen(
     val syncMessage by viewModel.syncMessage.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val exportStatus by viewModel.exportStatus.collectAsState()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsState()
 
     val repositories by viewModel.repositories.collectAsState()
     val selectedRepository by viewModel.selectedRepository.collectAsState()
@@ -2249,6 +2907,85 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToSyncHealth() }
+                    .testTag("sync_health_card")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HealthAndSafety,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Sync Health",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Review pending uploads, conflicts, trash, and current sync status.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth().testTag("app_lock_card")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                text = "Fingerprint App Lock",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Require fingerprint unlock when opening Octo Jotter.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = appLockEnabled,
+                        onCheckedChange = { viewModel.setAppLockEnabled(it) },
+                        modifier = Modifier.testTag("app_lock_toggle")
+                    )
+                }
+            }
 
             Text(
                 text = "Manual Synchronization",
@@ -2988,28 +3725,32 @@ fun AutolinkText(
     }
     
     if (hasAnnotations) {
-        ClickableText(
+        var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+        Text(
             text = text,
             style = mergedStyle,
-            onClick = { offset ->
-                text.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                    .firstOrNull()?.let { annotation ->
-                        try {
-                            uriHandler.openUri(annotation.item)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
+            onTextLayout = { layoutResult = it },
+            modifier = modifier.pointerInput(text) {
+                detectTapGestures { position ->
+                    val offset = layoutResult?.getOffsetForPosition(position) ?: return@detectTapGestures
+                    text.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                        .firstOrNull()?.let { annotation ->
+                            try {
+                                uriHandler.openUri(annotation.item)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
-                    }
-                text.getStringAnnotations(tag = "WIKILINK", start = offset, end = offset)
-                    .firstOrNull()?.let { annotation ->
-                        onWikiLinkClick?.invoke(annotation.item)
-                    }
-                text.getStringAnnotations(tag = "HASHTAG", start = offset, end = offset)
-                    .firstOrNull()?.let { annotation ->
-                        onHashtagClick?.invoke(annotation.item)
-                    }
-            },
-            modifier = modifier
+                    text.getStringAnnotations(tag = "WIKILINK", start = offset, end = offset)
+                        .firstOrNull()?.let { annotation ->
+                            onWikiLinkClick?.invoke(annotation.item)
+                        }
+                    text.getStringAnnotations(tag = "HASHTAG", start = offset, end = offset)
+                        .firstOrNull()?.let { annotation ->
+                            onHashtagClick?.invoke(annotation.item)
+                        }
+                }
+            }
         )
     } else {
         Text(
