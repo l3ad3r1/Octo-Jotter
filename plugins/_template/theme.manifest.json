@@ -1,0 +1,34 @@
+{
+  "id": "your-theme-id",
+  "name": "Your Theme Name",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "your-github-handle",
+  "description": "One-line description of your theme.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#AEB7FF",
+      "onPrimary": "#141C51",
+      "primaryContainer": "#2C3576",
+      "onPrimaryContainer": "#DEE0FF",
+      "secondary": "#BFC3E8",
+      "onSecondary": "#282D49",
+      "secondaryContainer": "#3E4361",
+      "onSecondaryContainer": "#DBE0FF",
+      "background": "#05060F",
+      "onBackground": "#E4E1F0",
+      "surface": "#090B16",
+      "onSurface": "#E4E1F0",
+      "surfaceVariant": "#44464F",
+      "onSurfaceVariant": "#C5C6D6",
+      "surfaceContainer": "#12131F",
+      "error": "#FFB4AB",
+      "onError": "#690005",
+      "outline": "#8E90A0",
+      "outlineVariant": "#3E4046"
+    }
+  }
+}

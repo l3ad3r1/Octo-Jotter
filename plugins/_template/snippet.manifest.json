@@ -1,0 +1,14 @@
+{
+  "id": "your-snippet-id",
+  "name": "Your Snippet Pack",
+  "version": "1.0.0",
+  "minAppVersion": "1.7",
+  "author": "your-github-handle",
+  "description": "One-line description of your snippet pack.",
+  "type": "snippet",
+  "permissions": [],
+  "snippets": [
+    { "id": "example", "name": "Example snippet", "content": "Replace me with any text.\nUse \\n for newlines.\n" },
+    { "id": "callout", "name": "Callout (note)", "content": "> [!note]\n> " }
+  ]
+}

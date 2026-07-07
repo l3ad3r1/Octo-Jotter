@@ -26,7 +26,8 @@ Gist.
 - 🗂️ **Folders & tags** for organising notes, plus **pin**, **search**, and
   swipe-to-delete.
 - 💾 **Auto-saved drafts** so nothing is lost mid-edit.
-- 🌗 **Light / dark / system** theming.
+- 🌗 **Light / dark / system** theming, plus **community theme/snippet/script
+  plugins** (see [Community plugins](#community-plugins)).
 - 🔒 **Encrypted token storage** — your GitHub Personal Access Token is stored
   with `androidx.security.crypto`, never in plain text.
 - ✨ **AI assistance** powered by Gemini (via Firebase AI) — optional, requires
@@ -109,6 +110,19 @@ To generate an upload keystore:
 keytool -genkeypair -v -keystore my-upload-key.jks -keyalg RSA -keysize 2048 \
   -validity 10000 -alias upload
 ```
+
+## Community plugins
+
+Octo Jotter can be extended with lightweight, JSON-based plugins — **themes**,
+editor **snippets**, and sandboxed **script** commands. Plugins are hosted in this
+repo under [`plugins/`](plugins/) and installed in-app from **Settings → Community
+Plugins** (no app rebuild required — the registry is fetched live).
+
+- 📖 **Authoring guide:** [`plugins/README.md`](plugins/README.md) — full manifest
+  schema, the theme color slots, the sandboxed `octo` script API, and a
+  test/submit checklist.
+- 🧩 **Starter template:** copy [`plugins/_template/`](plugins/_template/) for a
+  ready-made `theme` / `snippet` / `script` manifest to fill in.
 
 ## Project structure
 
