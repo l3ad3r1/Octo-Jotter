@@ -1,0 +1,11 @@
+{
+  "id": "sort-tasks",
+  "name": "Sort Tasks",
+  "version": "1.0.0",
+  "minAppVersion": "1.6",
+  "author": "l3ad3r1",
+  "description": "Editor command that moves completed task-list items (- [x]) to the bottom, keeping everything else in order.",
+  "type": "script",
+  "permissions": [],
+  "main": "octo.registerCommand(\"sortTasks\", \"Sort tasks: done to bottom\", function(t){ var lines = String(t).split(\"\\n\"); var done = []; var rest = []; for (var i = 0; i < lines.length; i++) { if (/^\\s*- \\[[xX]\\]/.test(lines[i])) { done.push(lines[i]); } else { rest.push(lines[i]); } } if (done.length === 0) { return String(t); } while (rest.length > 0 && rest[rest.length - 1].replace(/\\s/g, \"\") === \"\") { rest.pop(); } return rest.concat(done).join(\"\\n\"); });"
+}

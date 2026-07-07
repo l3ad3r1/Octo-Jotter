@@ -15,6 +15,36 @@ There are three kinds of plugin:
 
 ---
 
+## Available plugins
+
+The plugins currently in this registry — browse their manifests for reference.
+
+### Themes
+| Plugin | Mode | Description |
+|--------|------|-------------|
+| [Ocean Dark](ocean-dark/manifest.json) | dark | Deep-blue dark theme with aqua accents. |
+| [Midnight](midnight/manifest.json) | dark | Near-black midnight with soft periwinkle/indigo accents. |
+| [Midnight OLED](midnight-oled/manifest.json) | dark | True-black (`#000000`) variant of Midnight for OLED battery saving. |
+| [Emerald](emerald-dark/manifest.json) | dark | Deep forest-green with bright emerald accents. |
+| [Amber](amber-dark/manifest.json) | dark | Warm dark lit by golden amber accents. |
+| [Rose Light](rose-light/manifest.json) | light | Warm light theme with rose accents. |
+| [Daybreak](daybreak/manifest.json) | light | Warm golden-hour light theme; sunrise companion to Midnight. |
+
+### Scripts
+| Plugin | Permissions | Description |
+|--------|-------------|-------------|
+| [Text Tools](text-tools/manifest.json) | — | UPPERCASE, lowercase, Title Case, Slugify, word count. |
+| [Table of Contents](toc/manifest.json) | — | Scans headings and inserts a nested TOC at the top. |
+| [Sort Tasks](sort-tasks/manifest.json) | — | Moves completed `- [x]` items to the bottom of the note. |
+| [Note Actions](note-actions/manifest.json) | `notes:write` | Duplicate a note, or split its tasks into a new note. |
+
+### Snippets
+| Plugin | Description |
+|--------|-------------|
+| [Markdown Snippets](md-snippets/manifest.json) | Callout, table, code block, task list, front-matter templates. |
+
+---
+
 ## 1. How the system works
 
 1. **The registry** — [`plugins/registry.json`](registry.json) is a single index the

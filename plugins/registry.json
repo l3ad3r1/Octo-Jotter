@@ -73,6 +73,15 @@
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/toc/manifest.json"
     },
     {
+      "id": "sort-tasks",
+      "name": "Sort Tasks",
+      "author": "l3ad3r1",
+      "description": "Editor command that moves completed task-list items (- [x]) to the bottom, keeping everything else in order.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/sort-tasks/manifest.json"
+    },
+    {
       "id": "text-tools",
       "name": "Text Tools",
       "author": "l3ad3r1",
