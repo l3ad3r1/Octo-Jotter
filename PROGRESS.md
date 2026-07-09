@@ -4,6 +4,8 @@
 Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add launcher icon + splash → build release APK → write README/docs.
 
 ## Done
+- **v2.5 released (2026-07-09):** versionCode 16 / versionName 2.5. Signed release APK
+  (OctoJotter-v2.5.apk, v2 scheme, cert 640a69ce…) + GitHub release. Ships the Inkwell redesign.
 - **Inkwell redesign (2026-07-09):** retheme to the warm cream-paper design from the
   user's Figma export. Theme layer only — Color.kt (amber-on-cream light + warm-dark
   schemes, full surface-container ramp), Theme.kt (wired new roles), Type.kt (serif
