@@ -4,6 +4,12 @@
 Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add launcher icon + splash → build release APK → write README/docs.
 
 ## Done
+- **Inkwell redesign (2026-07-09):** retheme to the warm cream-paper design from the
+  user's Figma export. Theme layer only — Color.kt (amber-on-cream light + warm-dark
+  schemes, full surface-container ramp), Theme.kt (wired new roles), Type.kt (serif
+  titles / sans body / MonoFontFamily), plus a monospace markdown editor body in
+  NoteApp.kt. Verified on Pixel_7 emulator (home/settings/editor/preview). System
+  Serif/Monospace stand in for Libre Baskerville / JetBrains Mono (real TTFs = follow-up).
 - Cloned repo, JBR 21 + Android SDK (compileSdk 36.1) confirmed.
 - Generated missing Gradle wrapper; bumped to Gradle 9.6.1 (AGP 9.1.1 needs >= 9.3.1).
 - Renamed package `com.example` -> `com.l3ad3r1.octojotter`; app label "Octo Jotter".

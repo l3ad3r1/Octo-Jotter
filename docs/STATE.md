@@ -6,13 +6,14 @@ export the user supplied): amber-on-cream palette, serif titles, monospace-frien
 editor. Implemented at the Material theme layer so it propagates across all screens.
 
 ## Now
-Rewriting the theme layer (Color.kt palette, Theme.kt surface-container wiring, Type.kt
-typography).
+DONE — Inkwell theme shipped at the theme layer (Color.kt / Theme.kt / Type.kt) plus a
+monospace markdown editor body in NoteApp.kt. Verified on Pixel_7 emulator across home,
+settings, editor, preview: cream bg, serif Baskerville titles, amber accents, mono body.
 
 ## Next
-- Build assembleDebug, install, eyeball editor + note list.
-- Optional follow-ups: bundle real Libre Baskerville / JetBrains Mono fonts; give the
-  markdown editor a paper (#FEFCF9) background + mono body to match the design.
+- Optional follow-ups: bundle real Libre Baskerville / JetBrains Mono TTFs under res/font
+  for a pixel-exact match (currently system Serif/Monospace stand in).
+- Optional: version bump + signed release if the user wants to ship this.
 
 ## Constraints
 (none stated by user beyond "implement this design")

@@ -202,6 +202,7 @@ import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import com.l3ad3r1.octojotter.data.local.NoteEntity
+import com.l3ad3r1.octojotter.ui.theme.MonoFontFamily
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
 import com.l3ad3r1.octojotter.ui.theme.DarkStatusColors
@@ -2745,6 +2746,7 @@ fun EditorInputs(
                 value = textFieldValue,
                 onValueChange = onContentChanged,
                 placeholder = { Text("Type your markdown here...") },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonoFontFamily),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
