@@ -36,9 +36,18 @@ private val DarkColorScheme =
     onSurface = md_onSurface_dark,
     surfaceVariant = md_surfaceVariant_dark,
     onSurfaceVariant = md_onSurfaceVariant_dark,
+    surfaceContainerLowest = md_surfaceContainerLowest_dark,
+    surfaceContainerLow = md_surfaceContainerLow_dark,
     surfaceContainer = md_surfaceContainer_dark,
+    surfaceContainerHigh = md_surfaceContainerHigh_dark,
+    surfaceContainerHighest = md_surfaceContainerHighest_dark,
     outline = md_outline_dark,
     outlineVariant = md_outlineVariant_dark,
+    inverseSurface = md_inverseSurface_dark,
+    inverseOnSurface = md_inverseOnSurface_dark,
+    inversePrimary = md_inversePrimary_dark,
+    scrim = md_scrim_dark,
+    surfaceTint = md_primary_dark,
   )
 
 private val LightColorScheme =
@@ -65,9 +74,18 @@ private val LightColorScheme =
     onSurface = md_onSurface_light,
     surfaceVariant = md_surfaceVariant_light,
     onSurfaceVariant = md_onSurfaceVariant_light,
+    surfaceContainerLowest = md_surfaceContainerLowest_light,
+    surfaceContainerLow = md_surfaceContainerLow_light,
     surfaceContainer = md_surfaceContainer_light,
+    surfaceContainerHigh = md_surfaceContainerHigh_light,
+    surfaceContainerHighest = md_surfaceContainerHighest_light,
     outline = md_outline_light,
     outlineVariant = md_outlineVariant_light,
+    inverseSurface = md_inverseSurface_light,
+    inverseOnSurface = md_inverseOnSurface_light,
+    inversePrimary = md_inversePrimary_light,
+    scrim = md_scrim_light,
+    surfaceTint = md_primary_light,
   )
 
 @Composable
