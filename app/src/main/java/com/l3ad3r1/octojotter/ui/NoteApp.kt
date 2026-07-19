@@ -41,6 +41,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -152,7 +158,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -669,117 +675,74 @@ fun NotesListScreen(
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                TopAppBar(
-                    title = { Text(selectedFolder ?: "Octo Jotter", fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         IconButton(
-                            onClick = {
-                                scope.launch { drawerState.open() }
-                            },
+                            onClick = { scope.launch { drawerState.open() } },
                             modifier = Modifier.testTag("hamburger_menu_button")
                         ) {
+                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.updateSearchQuery(it) },
+                            placeholder = { Text("Search notes...") },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("search_bar_input")
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(
+                            onClick = onNavigateToSettings,
+                            modifier = Modifier.testTag("settings_action_button")
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Open folders menu"
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = "Settings",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
                             )
                         }
-                    },
-                    actions = {
-                    IconButton(
-                        onClick = { viewModel.syncNow() },
-                        modifier = Modifier.testTag("sync_action_button")
-                    ) {
-                        when (syncState) {
-                            SyncState.Syncing -> {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                            SyncState.Synced -> {
-                                Icon(
-                                    imageVector = Icons.Default.CloudDone,
-                                    contentDescription = "Synced",
-                                    tint = MaterialTheme.octoStatus.syncOk
-                                )
-                            }
-                            SyncState.Offline -> {
-                                // Offline is a normal state for an offline-first app,
-                                // so use a neutral tint rather than alarming error red.
-                                Icon(
-                                    imageVector = Icons.Default.CloudOff,
-                                    contentDescription = "Offline",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
                     }
-                    IconButton(
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.testTag("settings_action_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                }
+            },
+            floatingActionButton = {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.createNewNote { newId -> onNavigateToEditor(newId) } },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Add Note") },
+                    text = { Text("New Note", fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.testTag("add_note_fab")
                 )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    viewModel.createNewNote { newId ->
-                        onNavigateToEditor(newId)
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.testTag("add_note_fab")
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Note")
             }
-        }
-    ) { innerPadding ->
+        ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Search Bar Component
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                placeholder = { Text("Search notes by title or content...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search Notes"
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear search"
-                            )
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("search_bar_input")
-            )
 
             // Sort + view controls in one horizontally scrollable row so they never
             // overflow or crush each other on narrow screens.
@@ -1213,10 +1176,12 @@ fun NotesListScreen(
                             }
                         }
                     } else {
-                        LazyColumn(
+                        LazyVerticalStaggeredGrid(
+                            columns = StaggeredGridCells.Fixed(2),
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalItemSpacing = 12.dp,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(notes, key = { note -> note.id }) { note ->
                                 renderNoteCard(note)
@@ -2253,7 +2218,7 @@ fun EditorScreen(
                             Icon(
                                 imageVector = if (isEditing) Icons.Default.Visibility else Icons.Default.Edit,
                                 contentDescription = if (isEditing) "Preview note" else "Edit note",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                tint = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         note?.let { currentNote ->
@@ -2297,16 +2262,18 @@ fun EditorScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = Color.Transparent,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
                 )
-                if (isEditing) {
-                    editorToolbar()
-                }
             }
         },
+        bottomBar = {
+            if (isEditing) {
+                editorToolbar()
+            }
+        }
     ) { innerPadding ->
         note?.let {
             if (isEditing) {
@@ -3341,16 +3308,16 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
+                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("settings_back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = Color.Transparent,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -3364,7 +3331,8 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -3441,7 +3409,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onNavigateToSyncHealth() }
@@ -3479,7 +3448,8 @@ fun SettingsScreen(
             }
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth().testTag("app_lock_card")
             ) {
                 Row(
@@ -3596,7 +3566,8 @@ fun SettingsScreen(
 
             // ---- Repository Sync (folder-based, GitHub repos) ----
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth().testTag("repo_sync_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -3740,7 +3711,8 @@ fun SettingsScreen(
 
             // Community Plugins entry
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onNavigateToPlugins() }
@@ -3778,7 +3750,8 @@ fun SettingsScreen(
             }
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth().testTag("theme_settings_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -3811,7 +3784,8 @@ fun SettingsScreen(
             }
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth().testTag("backup_settings_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -3952,7 +3926,8 @@ fun SettingsScreen(
 
             // ---- App updates (GitHub Releases) ----
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth().testTag("update_settings_card")
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
