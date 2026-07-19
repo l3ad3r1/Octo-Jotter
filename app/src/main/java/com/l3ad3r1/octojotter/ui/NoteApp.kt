@@ -146,6 +146,9 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -675,67 +678,66 @@ fun NotesListScreen(
         Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
-                Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                TopAppBar(
+                    title = { Text("Octo Jotter", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
                         IconButton(
                             onClick = { scope.launch { drawerState.open() } },
                             modifier = Modifier.testTag("hamburger_menu_button")
                         ) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.updateSearchQuery(it) },
-                            placeholder = { Text("Search notes...") },
-                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.updateSearchQuery("") }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Clear search")
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(24.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("search_bar_input")
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(
-                            onClick = onNavigateToSettings,
-                            modifier = Modifier.testTag("settings_action_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = "Settings",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
+                    },
+                    actions = {
+                        IconButton(onClick = { /* TODO: show search */ }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
+                )
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ) {
+                    NavigationBarItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Notes") },
+                        label = { Text("Notes") },
+                        selected = true,
+                        onClick = { /* Already here */ }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                        label = { Text("Search") },
+                        selected = false,
+                        onClick = { /* TODO: trigger search */ }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
+                        label = { Text("Tags") },
+                        selected = false,
+                        onClick = { /* TODO */ }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        selected = false,
+                        onClick = onNavigateToSettings
+                    )
                 }
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
+                FloatingActionButton(
                     onClick = { viewModel.createNewNote { newId -> onNavigateToEditor(newId) } },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    icon = { Icon(Icons.Default.Add, contentDescription = "Add Note") },
-                    text = { Text("New Note", fontWeight = FontWeight.Bold) },
+                    shape = CircleShape,
                     modifier = Modifier.testTag("add_note_fab")
-                )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Note")
+                }
             }
         ) { innerPadding ->
         Column(
@@ -987,34 +989,24 @@ fun NotesListScreen(
                                             text = note.displayTitle.ifBlank { "Untitled Note" },
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (note.title.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        IconButton(
-                                            onClick = { viewModel.togglePinNote(note) },
-                                            modifier = Modifier
-                                                .testTag("pin_button_${note.id}")
-                                        ) {
-                                            Icon(
-                                                imageVector = if (note.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                                contentDescription = if (note.pinned) "Unpin Note" else "Pin Note",
-                                                tint = if (note.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                            )
-                                        }
-                                        if (note.locked) {
-                                            Icon(
-                                                imageVector = Icons.Default.Lock,
-                                                contentDescription = "Locked note",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                        }
+                                        Text(
+                                            text = formatRelativeTimestamp(note.lastModifiedLocally),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        SyncStatusBadge(note = note)
+                                        Icon(
+                                            imageVector = Icons.Default.Description, // Using Description as fallback for M down icon
+                                            contentDescription = "Markdown Note",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
@@ -1025,68 +1017,36 @@ fun NotesListScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     if (note.tags.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Spacer(modifier = Modifier.height(12.dp))
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.Label,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                                modifier = Modifier.size(14.dp)
-                                            )
                                             note.tags.take(3).forEach { tag ->
-                                                SuggestionChip(
-                                                    onClick = { viewModel.selectTag(tag) },
-                                                    label = { Text(tag, style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)) },
-                                                    modifier = Modifier.height(24.dp).testTag("note_card_tag_${note.id}_$tag")
-                                                )
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                                    modifier = Modifier.testTag("note_card_tag_${note.id}_$tag")
+                                                ) {
+                                                    Text(
+                                                        text = tag,
+                                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
                                             }
                                             if (note.tags.size > 3) {
-                                                Text(
-                                                    text = "+${note.tags.size - 3}",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = formatRelativeTimestamp(note.lastModifiedLocally),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                            )
-                                            val foldersDisplay = note.folderPath
-                                            if (foldersDisplay.isNotEmpty()) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                                    modifier = Modifier
-                                                        .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(4.dp))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                                 ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Folder,
-                                                        contentDescription = "Folder",
-                                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                        modifier = Modifier.size(12.dp)
-                                                    )
                                                     Text(
-                                                        text = foldersDisplay.joinToString(" / "),
-                                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                        text = "+${note.tags.size - 3}",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                     )
                                                 }
                                             }
@@ -2104,15 +2064,6 @@ fun EditorScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { insertMarkdown("# ", "") }, modifier = Modifier.testTag("format_heading_button")) {
-                    Icon(Icons.Default.Title, contentDescription = "Heading 1")
-                }
-                IconButton(onClick = { insertMarkdown("## ", "") }, modifier = Modifier.testTag("format_heading2_button")) {
-                    Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                }
-                IconButton(onClick = { insertMarkdown("### ", "") }, modifier = Modifier.testTag("format_heading3_button")) {
-                    Text("H3", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                }
                 IconButton(onClick = { insertMarkdown("**") }, modifier = Modifier.testTag("format_bold_button")) {
                     Icon(Icons.Default.FormatBold, contentDescription = "Format Bold")
                 }
@@ -2122,32 +2073,23 @@ fun EditorScreen(
                 IconButton(onClick = { insertMarkdown("~~") }, modifier = Modifier.testTag("format_strikethrough_button")) {
                     Icon(Icons.Default.FormatStrikethrough, contentDescription = "Format Strikethrough")
                 }
-                IconButton(onClick = { insertMarkdown("`") }, modifier = Modifier.testTag("format_code_button")) {
-                    Icon(Icons.Default.Code, contentDescription = "Inline Code")
+                IconButton(onClick = { insertMarkdown("## ", "") }, modifier = Modifier.testTag("format_heading2_button")) {
+                    Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 }
                 IconButton(onClick = { insertMarkdown("- ", "") }, modifier = Modifier.testTag("format_list_button")) {
                     Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Format Unordered List")
                 }
-                IconButton(onClick = { insertMarkdown("1. ", "") }, modifier = Modifier.testTag("format_numbered_list_button")) {
-                    Icon(Icons.Default.FormatListNumbered, contentDescription = "Format Numbered List")
-                }
                 IconButton(onClick = { insertMarkdown("> ", "") }, modifier = Modifier.testTag("format_quote_button")) {
                     Icon(Icons.Default.FormatQuote, contentDescription = "Blockquote")
                 }
-                IconButton(onClick = { insertMarkdown("- [ ] ", "") }, modifier = Modifier.testTag("format_checkbox_button")) {
-                    Icon(Icons.Default.CheckBox, contentDescription = "Task checkbox")
+                IconButton(onClick = { insertMarkdown("`") }, modifier = Modifier.testTag("format_code_button")) {
+                    Icon(Icons.Default.Code, contentDescription = "Inline Code")
                 }
                 IconButton(onClick = { insertMarkdown("[", "](url)") }, modifier = Modifier.testTag("format_link_button")) {
                     Icon(Icons.Default.InsertLink, contentDescription = "Link")
                 }
-                IconButton(onClick = { insertMarkdown("[[", "]]") }, modifier = Modifier.testTag("format_wikilink_button")) {
-                    Icon(Icons.Default.Link, contentDescription = "Wiki link")
-                }
                 IconButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.testTag("add_image_button")) {
                     Icon(Icons.Default.Image, contentDescription = "Add image")
-                }
-                IconButton(onClick = { showDrawingDialog = true }, modifier = Modifier.testTag("add_drawing_button")) {
-                    Icon(Icons.Default.Brush, contentDescription = "Add drawing")
                 }
                 if (pluginCommands.isNotEmpty() || pluginSnippets.isNotEmpty()) {
                     Box {
@@ -2194,78 +2136,30 @@ fun EditorScreen(
         topBar = {
             Column {
                 TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = editorTitle.ifBlank { "Untitled Note" },
-                            fontWeight = FontWeight.SemiBold,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        SaveStatusIndicator(saveStatus = saveStatus)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    title = { Text("Markdown Note", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = handleExit) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
                         IconButton(
-                            onClick = { isEditing = !isEditing },
-                            modifier = Modifier.testTag("editor_mode_button")
+                            onClick = { /* TODO: handle sparkle */ },
+                            modifier = Modifier
+                                .background(Color(0xFF8A2BE2), CircleShape)
+                                .size(32.dp)
+                                .padding(4.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isEditing) Icons.Default.Visibility else Icons.Default.Edit,
-                                contentDescription = if (isEditing) "Preview note" else "Edit note",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                            Icon(Icons.Default.Bolt, contentDescription = "Sparkle", tint = Color.White)
                         }
-                        note?.let { currentNote ->
-                            IconButton(
-                                onClick = onNavigateToHistory,
-                                enabled = !currentNote.gistId.isNullOrBlank() || !currentNote.repository.isNullOrBlank(),
-                                modifier = Modifier.testTag("editor_history_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.History,
-                                    contentDescription = "Note history",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewModel.toggleLockNote(currentNote) },
-                                modifier = Modifier.testTag("editor_lock_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (currentNote.locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                                    contentDescription = if (currentNote.locked) "Unlock note" else "Lock note",
-                                    tint = if (currentNote.locked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewModel.togglePinNote(currentNote) },
-                                modifier = Modifier.testTag("editor_pin_button")
-                            ) {
-                                Icon(
-                                    imageVector = if (currentNote.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                    contentDescription = if (currentNote.pinned) "Unpin Note" else "Pin Note",
-                                    tint = if (currentNote.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        TextButton(onClick = { /* Handle Save manually if needed, but it's autosaved */ }) {
+                            Text("SAVE", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                         }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = handleExit) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
                 )
             }
         },
@@ -3308,16 +3202,19 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineMedium) },
+                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("settings_back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { /* Handle profile */ }) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = MaterialTheme.colorScheme.background
                 )
             )
         }
@@ -3328,13 +3225,13 @@ fun SettingsScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -3352,72 +3249,63 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
+                
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-            OutlinedTextField(
-                value = inputToken,
-                onValueChange = { inputToken = it },
-                label = { Text("GitHub Personal Access Token") },
-                placeholder = { Text("ghp_...") },
-                singleLine = true,
-                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                        Icon(
-                            imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (tokenVisible) "Hide Token" else "Show Token"
-                        )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = inputToken,
+                        onValueChange = { inputToken = it },
+                        label = { Text("GitHub Personal Access Token") },
+                        placeholder = { Text("ghp_...") },
+                        singleLine = true,
+                        visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                                Icon(
+                                    imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (tokenVisible) "Hide Token" else "Show Token"
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("github_token_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { viewModel.saveToken(inputToken.trim()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("save_token_button")
+                    ) {
+                        Text("Save Securely")
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("github_token_input")
-            )
 
-            // Primary action is full-width; the destructive "Disconnect" is
-            // demoted to a text button and guarded by a confirmation dialog.
-            Button(
-                onClick = { viewModel.saveToken(inputToken.trim()) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("save_token_button")
-            ) {
-                Text("Save Securely")
-            }
+                    if (token.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { showClearTokenConfirm = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("clear_token_button")
+                        ) {
+                            Text("Disconnect GitHub", color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
 
-            if (token.isNotEmpty()) {
-                TextButton(
-                    onClick = { showClearTokenConfirm = true },
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("clear_token_button")
-                ) {
-                    Text("Disconnect GitHub", color = MaterialTheme.colorScheme.error)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToSyncHealth() }
-                    .testTag("sync_health_card")
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        .clickable { onNavigateToSyncHealth() }
+                        .padding(16.dp)
+                        .testTag("sync_health_card"),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -3445,15 +3333,14 @@ fun SettingsScreen(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().testTag("app_lock_card")
-            ) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .testTag("app_lock_card"),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -3707,19 +3594,15 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
 
-            // Community Plugins entry
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToPlugins() }
-                    .testTag("community_plugins_card")
-            ) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToPlugins() }
+                        .padding(16.dp)
+                        .testTag("community_plugins_card"),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -3747,14 +3630,15 @@ fun SettingsScreen(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().testTag("theme_settings_card")
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .testTag("theme_settings_card")
+                ) {
                     Text(
                         text = "App Theme",
                         style = MaterialTheme.typography.titleMedium,
@@ -3781,14 +3665,15 @@ fun SettingsScreen(
                         )
                     }
                 }
-            }
 
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().testTag("backup_settings_card")
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .testTag("backup_settings_card")
+                ) {
                     Text(
                         text = "Database Backup",
                         style = MaterialTheme.typography.titleMedium,
@@ -3922,15 +3807,15 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
 
-            // ---- App updates (GitHub Releases) ----
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().testTag("update_settings_card")
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                        .testTag("update_settings_card")
+                ) {
                     Text(
                         text = "Updates",
                         style = MaterialTheme.typography.titleMedium,
@@ -4062,8 +3947,9 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
-
+                }
+            } // Close unified Settings Card
+            
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
