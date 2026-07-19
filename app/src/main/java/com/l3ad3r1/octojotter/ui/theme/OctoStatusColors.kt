@@ -23,23 +23,23 @@ data class OctoStatusColors(
 )
 
 val LightStatusColors = OctoStatusColors(
-  syncOk = Color(0xFF2E7D32),
-  syncPending = Color(0xFF8A5000),
-  localOnly = Color(0xFF5F6368),
-  wikiLink = Color(0xFF1565C0),
-  hashtag = Color(0xFF8A5000),
-  code = Color(0xFFB3123C),
-  codeBackground = Color(0xFFEFEFF2),
+  syncOk = Color(0xFF059669),
+  syncPending = Color(0xFFD97706),
+  localOnly = Color(0xFF6B7280),
+  wikiLink = Color(0xFF4F46E5),
+  hashtag = Color(0xFF4F46E5),
+  code = Color(0xFFBE123C),
+  codeBackground = Color(0xFFF3F4F6),
 )
 
 val DarkStatusColors = OctoStatusColors(
-  syncOk = Color(0xFF7FD98A),
-  syncPending = Color(0xFFFFB77C),
-  localOnly = Color(0xFFB0B4BB),
-  wikiLink = Color(0xFF9DCAFF),
-  hashtag = Color(0xFFFFB77C),
-  code = Color(0xFFFF9EB1),
-  codeBackground = Color(0xFF2A2D31),
+  syncOk = Color(0xFF34D399),
+  syncPending = Color(0xFFFBBF24),
+  localOnly = Color(0xFF9CA3AF),
+  wikiLink = Color(0xFF818CF8),
+  hashtag = Color(0xFF818CF8),
+  code = Color(0xFFFDA4AF),
+  codeBackground = Color(0xFF27272A),
 )
 
 val LocalOctoStatusColors = staticCompositionLocalOf { LightStatusColors }
