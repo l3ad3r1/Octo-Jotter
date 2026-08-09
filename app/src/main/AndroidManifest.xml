@@ -52,6 +52,12 @@
             </intent-filter>
         </activity>
 
+        <!-- On-device RAG chat over the user's notes (Phase 2). -->
+        <activity
+            android:name="com.l3ad3r1.octojotter.ai.chat.AiChatActivity"
+            android:exported="false"
+            android:label="Ask your notes" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

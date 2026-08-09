@@ -3,12 +3,16 @@ package com.l3ad3r1.octojotter.ai
 import android.content.Context
 import com.l3ad3r1.octojotter.ai.embed.EmbeddingService
 import com.l3ad3r1.octojotter.ai.embed.HashingBagOfWordsEmbeddingService
+import com.l3ad3r1.octojotter.ai.chat.LlamaTextGenerator
+import com.l3ad3r1.octojotter.ai.chat.RagChatEngine
 import com.l3ad3r1.octojotter.ai.embed.OnnxMiniLmEmbeddingService
 import com.l3ad3r1.octojotter.ai.index.NoteChunker
 import com.l3ad3r1.octojotter.ai.index.NoteIndexer
 import com.l3ad3r1.octojotter.ai.index.VectorStore
+import com.l3ad3r1.octojotter.ai.model.ChatModel
 import com.l3ad3r1.octojotter.ai.model.ModelCatalog
 import com.l3ad3r1.octojotter.ai.model.ModelManager
+import com.l3ad3r1.ondevice.OnDeviceLlm
 import com.l3ad3r1.octojotter.ai.search.SemanticSearch
 import com.l3ad3r1.octojotter.data.local.AppDatabase
 import com.l3ad3r1.octojotter.data.local.NoteDao
@@ -74,6 +78,34 @@ class AiContainer private constructor(
         vectorStore = vectorStore,
         keyword = DaoKeywordSource(noteDao),
     )
+
+    // --- RAG chat (Phase 2) ---
+
+    /** The GGUF chat model (default; shared with Hermes when present). */
+    val chatModel: ChatModel = ModelCatalog.DEFAULT_CHAT
+
+    /** True when the chat GGUF is on disk (possibly downloaded by Hermes). */
+    fun isChatModelReady(): Boolean = modelManager.isChatModelPresent(chatModel)
+
+    /** The on-device inference engine. Created lazily — throws on non-arm64 when
+     *  the native library can't load, so only touch this on capable devices. */
+    private val inferenceEngine by lazy { OnDeviceLlm.engine(appContext) }
+
+    /**
+     * A RAG chat engine grounded in the user's notes. Only call on a device where
+     * [AiCapability.supportsChat] is true and the chat model is present.
+     */
+    fun ragChat(): RagChatEngine {
+        val generator = LlamaTextGenerator(
+            engine = inferenceEngine,
+            modelFile = { modelManager.storage.chatModelFile(chatModel.file.fileName).takeIf { it.exists() } },
+        )
+        return RagChatEngine(
+            embedder = embedder(),
+            vectorStore = vectorStore,
+            generator = generator,
+        )
+    }
 
     private class DaoNoteSource(private val dao: NoteDao) : NoteIndexer.NoteSource {
         override suspend fun all(): List<NoteEntity> = dao.getAllNotes()

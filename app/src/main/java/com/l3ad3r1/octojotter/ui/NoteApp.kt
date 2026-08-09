@@ -2,6 +2,8 @@ package com.l3ad3r1.octojotter.ui
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import com.l3ad3r1.octojotter.ai.chat.AiChatActivity
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -79,6 +81,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -755,6 +758,16 @@ fun NotesListScreen(
                     },
                     actions = {
                         if (!searchExpanded) {
+                            if (viewModel.semanticSearchAvailable) {
+                                IconButton(
+                                    onClick = {
+                                        context.startActivity(Intent(context, AiChatActivity::class.java))
+                                    },
+                                    modifier = Modifier.testTag("open_chat_button"),
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes")
+                                }
+                            }
                             IconButton(
                                 onClick = { searchExpanded = true },
                                 modifier = Modifier.testTag("open_search_button"),

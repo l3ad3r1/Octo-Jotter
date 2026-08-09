@@ -355,6 +355,14 @@ Each phase is independently shippable and independently useful.
   wiring Smart search into the production search UI (the reactive `NoteViewModel` flow),
   which needs on-device validation of the ONNX embedder first.
 - **Phase 2 — RAG Chat (G2).** `RagChatEngine`, `AiChatScreen`, citations.
+  **Status (2026-08-09): engine + UI done; generation needs arm64 hardware to
+  verify.** Landed: `RagPrompt` (grounded prompt + citations), `RagChatEngine`
+  (embed → retrieve → prompt → stream `RagEvent`s), `TextGenerator` +
+  `LlamaTextGenerator` (over the Phase 0 `InferenceEngine`), `AiChatViewModel` /
+  `AiChatActivity` (message list, streaming, citation chips, chat-model download
+  gate), a top-bar chat entry (capability-gated), and `AiContainer.ragChat()`.
+  7 unit tests. Runtime-verified on an emulator up to the generation boundary
+  (entry point, activity, model-gate); llama.cpp generation itself is arm64-only.
 - **Phase 3 — Agentic Filing (G4)** and **Voice (G5).** Both small on top of Phases 0–1.
 - **Phase 4 — Inline Completion (G3).** Last, because it's the most latency- and
   device-sensitive.
