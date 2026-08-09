@@ -74,7 +74,7 @@ private fun SemanticSearchDebugScreen(modifier: Modifier = Modifier) {
         Button(onClick = {
             scope.launch {
                 status = "indexing…"
-                val r = runCatching { ai.indexer.indexAll() }
+                val r = runCatching { ai.indexer().indexAll() }
                 status = r.fold(
                     { "indexed=${it.indexed} skipped=${it.skipped} removed=${it.removed}" },
                     { "index failed: ${it.message}" },
@@ -93,7 +93,7 @@ private fun SemanticSearchDebugScreen(modifier: Modifier = Modifier) {
         Button(onClick = {
             scope.launch {
                 status = "searching…"
-                val r = runCatching { ai.search.search(query, k = 10) }
+                val r = runCatching { ai.search().search(query, k = 10) }
                 r.onSuccess { results = it; status = "${it.size} results" }
                     .onFailure { status = "search failed: ${it.message}" }
             }

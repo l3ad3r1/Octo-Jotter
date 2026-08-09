@@ -8,14 +8,29 @@
     <!-- Needed so the in-app updater can launch the APK installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- On-device AI (optional): read/write the shared "AI Models" folder so a
+         model downloaded here or by the sibling Hermes app is reused, avoiding a
+         second multi-GB download. All-Files-Access is used only for that folder.
+         Octo Jotter is distributed via GitHub release APKs (not the Play Store),
+         where this permission is permitted; the feature degrades gracefully to
+         app-private storage when it is not granted. On API <= 28 the legacy
+         WRITE permission suffices. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.MyApplication">
         <activity
             android:name=".MainActivity"

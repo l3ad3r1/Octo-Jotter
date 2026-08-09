@@ -7,6 +7,8 @@ import com.l3ad3r1.octojotter.ai.embed.OnnxMiniLmEmbeddingService
 import com.l3ad3r1.octojotter.ai.index.NoteChunker
 import com.l3ad3r1.octojotter.ai.index.NoteIndexer
 import com.l3ad3r1.octojotter.ai.index.VectorStore
+import com.l3ad3r1.octojotter.ai.model.ModelCatalog
+import com.l3ad3r1.octojotter.ai.model.ModelManager
 import com.l3ad3r1.octojotter.ai.search.SemanticSearch
 import com.l3ad3r1.octojotter.data.local.AppDatabase
 import com.l3ad3r1.octojotter.data.local.NoteDao
@@ -18,9 +20,10 @@ import java.io.File
  * Manual composition root for on-device AI (the app has no DI framework).
  *
  * Wires the embedder, vector store, indexer and hybrid search from a Context.
- * Prefers the real ONNX MiniLM embedder when its model + vocab are on disk,
- * otherwise falls back to the deterministic bag-of-words embedder so the
- * pipeline still functions (lexical-only) — see [useRealEmbedder].
+ * The embedder is chosen dynamically: the real ONNX MiniLM model when its files
+ * are present ([ModelManager.isEmbeddingReady]) — which includes a copy shared by
+ * Hermes — otherwise the deterministic bag-of-words fallback. Because the choice
+ * is re-evaluated per access, a download takes effect without an app restart.
  */
 class AiContainer private constructor(
     private val appContext: Context,
@@ -28,40 +31,49 @@ class AiContainer private constructor(
     private val noteDao: NoteDao,
     private val embeddingDao: NoteEmbeddingDao,
 ) {
-    /** Directory where the MiniLM model + vocab are expected (download-on-first-use). */
-    val modelDir: File = File(appContext.filesDir, "ai-models/minilm")
-    private val modelFile: File get() = File(modelDir, "model.onnx")
-    private val vocabFile: File get() = File(modelDir, "vocab.txt")
+    val modelManager: ModelManager = ModelManager(appContext)
+    private val embeddingModel = ModelCatalog.EMBEDDING
 
-    /** True when the real ONNX model + tokenizer vocab are present on disk. */
-    val useRealEmbedder: Boolean get() = modelFile.exists() && vocabFile.exists()
+    /** Directory the embedding model + vocab live in (shared with Hermes when granted). */
+    val modelDir: File get() = modelManager.storage.embeddingDir(embeddingModel.id)
+    private val modelFile: File get() = File(modelDir, embeddingModel.model.fileName)
+    private val vocabFile: File get() = File(modelDir, embeddingModel.vocab.fileName)
 
-    val embedder: EmbeddingService by lazy {
+    /** True when the real ONNX embedder is usable (files present). */
+    val useRealEmbedder: Boolean get() = modelManager.isEmbeddingReady(embeddingModel)
+
+    private val fallbackEmbedder by lazy { HashingBagOfWordsEmbeddingService(embeddingModel.dimension) }
+    @Volatile private var realEmbedder: OnnxMiniLmEmbeddingService? = null
+
+    /** The embedder to use right now — real if the model is present, else fallback. */
+    fun embedder(): EmbeddingService {
         if (useRealEmbedder) {
-            OnnxMiniLmEmbeddingService(modelFile = modelFile, vocabFile = vocabFile)
-        } else {
-            HashingBagOfWordsEmbeddingService()
+            realEmbedder?.let { return it }
+            return synchronized(this) {
+                realEmbedder ?: OnnxMiniLmEmbeddingService(
+                    modelFile = modelFile,
+                    vocabFile = vocabFile,
+                    dimension = embeddingModel.dimension,
+                ).also { realEmbedder = it }
+            }
         }
+        return fallbackEmbedder
     }
 
     val vectorStore: VectorStore by lazy { VectorStore(embeddingDao) }
 
-    val indexer: NoteIndexer by lazy {
-        NoteIndexer(
-            notes = DaoNoteSource(noteDao),
-            embeddingDao = embeddingDao,
-            embedder = embedder,
-            chunker = NoteChunker(),
-        )
-    }
+    fun indexer(): NoteIndexer = NoteIndexer(
+        notes = DaoNoteSource(noteDao),
+        embeddingDao = embeddingDao,
+        embedder = embedder(),
+        chunker = NoteChunker(),
+    )
 
-    val search: SemanticSearch by lazy {
-        SemanticSearch(
-            embedder = embedder,
-            vectorStore = vectorStore,
-            keyword = DaoKeywordSource(noteDao),
-        )
-    }
+    fun search(): SemanticSearch = SemanticSearch(
+        embedder = embedder(),
+        vectorStore = vectorStore,
+        keyword = DaoKeywordSource(noteDao),
+    )
 
     private class DaoNoteSource(private val dao: NoteDao) : NoteIndexer.NoteSource {
         override suspend fun all(): List<NoteEntity> = dao.getAllNotes()

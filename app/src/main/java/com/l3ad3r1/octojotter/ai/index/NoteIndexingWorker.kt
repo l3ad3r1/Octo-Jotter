@@ -22,7 +22,7 @@ class NoteIndexingWorker(
         val ai = AiContainer.get(applicationContext)
         if (!ai.capability.supportsSemanticSearch) return Result.success()
         return try {
-            ai.indexer.indexAll()
+            ai.indexer().indexAll()
             Result.success()
         } catch (t: Throwable) {
             Result.retry()
