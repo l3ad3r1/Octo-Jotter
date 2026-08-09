@@ -58,6 +58,14 @@ android {
     compose = true
     buildConfig = true
   }
+  packaging {
+    jniLibs {
+      // :ondevice-llm builds llama.cpp with GGML_BACKEND_DL=ON, so ggml
+      // dlopen()s its backend .so files at runtime. Legacy packaging extracts
+      // them to the filesystem, which is what makes that dlopen resolve.
+      useLegacyPackaging = true
+    }
+  }
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
@@ -82,6 +90,8 @@ googleServices {
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
+  // On-device LLM inference (Phase 0 — see docs/ON-DEVICE-AI.md).
+  implementation(project(":ondevice-llm"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
