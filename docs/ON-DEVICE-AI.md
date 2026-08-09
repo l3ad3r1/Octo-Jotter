@@ -346,6 +346,14 @@ Each phase is independently shippable and independently useful.
 - **Phase 1 — Embeddings + Semantic Search (G1).** Real MiniLM embedder, `note_embeddings`
   table + migration 10→11, `NoteIndexer` WorkManager job, `VectorStore`, hybrid search
   UI. *Highest value, lowest model-size cost — ship first.*
+  **Status (2026-08-09): engine done, production UI pending.** Landed: ONNX MiniLM
+  embedder + WordPiece tokenizer, bag-of-words fallback, `note_embeddings` table +
+  `MIGRATION_10_11`, `NoteChunker`, `VectorStore`, `NoteIndexer` + `NoteIndexingWorker`,
+  hybrid `SemanticSearch` (α=0.7), `AiCapability` gating, `AiContainer` wiring, and a
+  debug validation screen (`SemanticSearchDebugActivity`). 20 unit tests green. Still
+  to do: download-on-first-use of the MiniLM model + `vocab.txt` (ModelManager), and
+  wiring Smart search into the production search UI (the reactive `NoteViewModel` flow),
+  which needs on-device validation of the ONNX embedder first.
 - **Phase 2 — RAG Chat (G2).** `RagChatEngine`, `AiChatScreen`, citations.
 - **Phase 3 — Agentic Filing (G4)** and **Voice (G5).** Both small on top of Phases 0–1.
 - **Phase 4 — Inline Completion (G3).** Last, because it's the most latency- and

@@ -8,11 +8,12 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class], version = 10, exportSchema = false)
+@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class, NoteEmbeddingEntity::class], version = 11, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun pluginDao(): PluginDao
+    abstract fun noteEmbeddingDao(): NoteEmbeddingDao
 
     companion object {
         @Volatile
@@ -72,6 +73,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v10 -> v11: add the on-device AI embedding index (Phase 1 of
+        // docs/ON-DEVICE-AI.md). Additive & local-only; existing notes are
+        // untouched. Rows cascade-delete with their note. MUST be registered
+        // below — without it, the destructive fallback would wipe every note.
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS note_embeddings (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        noteId INTEGER NOT NULL,
+                        chunkIndex INTEGER NOT NULL,
+                        chunkText TEXT NOT NULL,
+                        vector BLOB NOT NULL,
+                        contentHash TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        embeddedAt INTEGER NOT NULL,
+                        FOREIGN KEY(noteId) REFERENCES notes(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_note_embeddings_noteId ON note_embeddings(noteId)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -79,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "gist_notes_database"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
                     .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance

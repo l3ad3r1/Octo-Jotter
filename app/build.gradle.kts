@@ -92,6 +92,8 @@ googleServices {
 dependencies {
   // On-device LLM inference (Phase 0 — see docs/ON-DEVICE-AI.md).
   implementation(project(":ondevice-llm"))
+  // On-device embeddings for semantic search (Phase 1).
+  implementation(libs.onnxruntime.android)
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
