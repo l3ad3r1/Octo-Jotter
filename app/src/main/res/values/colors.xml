@@ -7,7 +7,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <!-- Octo Jotter brand -->
-    <color name="octo_blue">#FF1478C4</color>
-    <color name="ic_launcher_background">#FF1478C4</color>
+    <!-- Octo Jotter brand — matches md_primary_light in ui/theme/Color.kt -->
+    <color name="octo_indigo">#FF4F46E5</color>
+    <color name="ic_launcher_background">#FF4F46E5</color>
 </resources>

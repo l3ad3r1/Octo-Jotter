@@ -47,7 +47,7 @@ class SemanticSearch(
         }
 
         val qVec = embedder.embed(q)
-        val semantic = vectorStore.topKNotes(qVec, k = k * 3)
+        val semantic = vectorStore.topKNotes(qVec, k = k * 3, modelId = embedder.modelId)
             .associate { it.noteId to it }
 
         val ids = keywordIds + semantic.keys

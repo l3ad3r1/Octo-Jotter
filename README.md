@@ -17,8 +17,11 @@ Gist.
 
 ## Features
 
-- 📝 **Markdown editor** with a formatting toolbar (bold, italic, strikethrough,
-  lists, links) and live preview.
+- 📝 **Markdown editor** with a grouped formatting toolbar — bold, italic,
+  strikethrough, super/subscript, highlight, headings, bullet/numbered/task
+  lists, callouts, quotes, inline code and code blocks, links, images,
+  drawings, tables, dividers, indent/outdent and undo/redo — plus adjustable
+  editor type size, live word count, and a preview that renders all of it.
 - 🐙 **GitHub Gist sync** — each note is a **private** Gist, synced in the
   background. Your data stays in your own GitHub account.
 - 📴 **Offline-first** — notes live in a local Room database and sync when a
@@ -139,12 +142,28 @@ vault structure and how it maps to a typical Obsidian setup.
 app/src/main/java/com/l3ad3r1/octojotter/
 ├── MainActivity.kt          # single-Activity host, installs the splash screen
 ├── ui/                      # Compose screens, NoteApp, NoteViewModel, theme
+│   └── editor/              # formatting toolbar + pure Markdown transforms
 ├── data/
 │   ├── local/               # Room entities, DAO, DataStore prefs, backup
 │   ├── remote/              # GitHub Gists API (Retrofit), encrypted TokenManager
 │   └── repository/          # NoteRepository — local <-> Gist reconciliation
 └── sync/                    # SyncWorker (WorkManager)
 ```
+
+## The app icon
+
+The launcher icon is generated, not drawn. `tools/generate_icon.py` defines the
+octopus mark as a set of parametric curves — a superellipse mantle and eight
+arms whose centre lines are `r(s) = R0 + (R1 - R0)s` with a cubic-eased angular
+hook `phi(s) = PHI * s^3` — and emits the adaptive foreground vector plus every
+raster density:
+
+```bash
+python tools/generate_icon.py     # requires Pillow
+```
+
+To restyle the icon, change the constants at the top of that script and re-run
+it; don't hand-edit `res/drawable/ic_launcher_foreground.xml`.
 
 ## License
 

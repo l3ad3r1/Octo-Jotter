@@ -27,18 +27,21 @@ data class NoteHit(
  */
 class VectorStore(private val dao: NoteEmbeddingDao) {
 
-    /** Top-[k] chunks most similar to [queryVector], highest score first. */
-    suspend fun topKChunks(queryVector: FloatArray, k: Int = 6): List<ChunkHit> {
+    /**
+     * Top-[k] chunks most similar to [queryVector], highest score first.
+     * [modelId], when set, restricts the comparison to vectors produced by that
+     * embedder — vectors from a different model live in a different space and a
+     * dot product across them is meaningless even at equal dimensionality.
+     */
+    suspend fun topKChunks(queryVector: FloatArray, k: Int = 6, modelId: String? = null): List<ChunkHit> {
         require(k > 0) { "k must be > 0" }
-        val rows = dao.allActive()
-        return rankChunks(queryVector, rows, k)
+        return rankChunks(queryVector, dao.allActive(), k, modelId)
     }
 
     /** Top-[k] notes, each scored by its single best-matching chunk. */
-    suspend fun topKNotes(queryVector: FloatArray, k: Int = 10): List<NoteHit> {
-        val rows = dao.allActive()
+    suspend fun topKNotes(queryVector: FloatArray, k: Int = 10, modelId: String? = null): List<NoteHit> {
         val best = HashMap<Int, ChunkHit>()
-        for (hit in rankChunks(queryVector, rows, limit = Int.MAX_VALUE)) {
+        for (hit in rankChunks(queryVector, dao.allActive(), limit = Int.MAX_VALUE, modelId = modelId)) {
             val existing = best[hit.noteId]
             if (existing == null || hit.score > existing.score) best[hit.noteId] = hit
         }
@@ -52,8 +55,10 @@ class VectorStore(private val dao: NoteEmbeddingDao) {
         queryVector: FloatArray,
         rows: List<NoteEmbeddingEntity>,
         limit: Int,
+        modelId: String? = null,
     ): List<ChunkHit> =
         rows.asSequence()
+            .filter { modelId == null || it.model == modelId }
             .map { row ->
                 val v = FloatVectors.fromBytes(row.vector)
                 val score = if (v.size == queryVector.size) FloatVectors.dot(queryVector, v) else Float.NEGATIVE_INFINITY

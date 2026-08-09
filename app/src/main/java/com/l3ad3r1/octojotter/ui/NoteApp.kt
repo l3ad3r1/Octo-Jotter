@@ -35,6 +35,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,6 +79,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
@@ -210,8 +213,26 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.RestoreFromTrash
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material.icons.filled.Tune
+import com.l3ad3r1.octojotter.data.markdown.Frontmatter
+import com.l3ad3r1.octojotter.ui.editor.PropertiesCard
+import com.l3ad3r1.octojotter.ui.editor.PropertiesDialog
+import com.l3ad3r1.octojotter.data.local.EditorPreferences
 import com.l3ad3r1.octojotter.data.local.NoteEntity
+import com.l3ad3r1.octojotter.ui.editor.EditorHistory
+import com.l3ad3r1.octojotter.ui.editor.EditorToolbar
+import com.l3ad3r1.octojotter.ui.editor.PluginAction
+import com.l3ad3r1.octojotter.ui.editor.insertInline
 import com.l3ad3r1.octojotter.ui.theme.MonoFontFamily
+import com.l3ad3r1.octojotter.ui.theme.SansFontFamily
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
 import com.l3ad3r1.octojotter.ui.theme.DarkStatusColors
@@ -444,6 +465,9 @@ fun NotesListScreen(
     val availableTags by viewModel.availableTags.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchMode by viewModel.searchMode.collectAsState()
+    val isSmartSearching by viewModel.isSmartSearching.collectAsState()
+    var searchExpanded by remember { mutableStateOf(false) }
     val sortBy by viewModel.sortBy.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
@@ -679,18 +703,61 @@ fun NotesListScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("Octo Jotter", fontWeight = FontWeight.Bold) },
+                    title = {
+                        if (searchExpanded) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { viewModel.updateSearchQuery(it) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("search_field"),
+                                placeholder = {
+                                    Text(
+                                        if (searchMode == SearchMode.SMART) "Smart search your notes…"
+                                        else "Search notes…"
+                                    )
+                                },
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (isSmartSearching) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    } else if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Clear")
+                                        }
+                                    }
+                                },
+                            )
+                        } else {
+                            Text("Octo Jotter", fontWeight = FontWeight.Bold)
+                        }
+                    },
                     navigationIcon = {
-                        IconButton(
-                            onClick = { scope.launch { drawerState.open() } },
-                            modifier = Modifier.testTag("hamburger_menu_button")
-                        ) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        if (searchExpanded) {
+                            IconButton(onClick = {
+                                searchExpanded = false
+                                viewModel.updateSearchQuery("")
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                            }
+                        } else {
+                            IconButton(
+                                onClick = { scope.launch { drawerState.open() } },
+                                modifier = Modifier.testTag("hamburger_menu_button")
+                            ) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu")
+                            }
                         }
                     },
                     actions = {
-                        IconButton(onClick = { /* TODO: show search */ }) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        if (!searchExpanded) {
+                            IconButton(
+                                onClick = { searchExpanded = true },
+                                modifier = Modifier.testTag("open_search_button"),
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -711,8 +778,8 @@ fun NotesListScreen(
                     NavigationBarItem(
                         icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                         label = { Text("Search") },
-                        selected = false,
-                        onClick = { /* TODO: trigger search */ }
+                        selected = searchExpanded,
+                        onClick = { searchExpanded = true }
                     )
                     NavigationBarItem(
                         icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
@@ -745,6 +812,32 @@ fun NotesListScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+
+            // Keyword vs Smart (semantic) search — only while searching and only
+            // on devices that can run on-device AI (arm64 + enough RAM).
+            if (searchExpanded && viewModel.semanticSearchAvailable) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = searchMode == SearchMode.KEYWORD,
+                        onClick = { viewModel.setSearchMode(SearchMode.KEYWORD) },
+                        label = { Text("Keyword") },
+                        modifier = Modifier.testTag("search_mode_keyword"),
+                    )
+                    FilterChip(
+                        selected = searchMode == SearchMode.SMART,
+                        onClick = { viewModel.setSearchMode(SearchMode.SMART) },
+                        leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        label = { Text("Smart") },
+                        modifier = Modifier.testTag("search_mode_smart"),
+                    )
+                }
+            }
 
             // Sort + view controls in one horizontally scrollable row so they never
             // overflow or crush each other on narrow screens.
@@ -1761,7 +1854,12 @@ fun EditorScreen(
     val availableFolders by viewModel.allFolders.collectAsState()
     val pluginCommands by viewModel.pluginCommands.collectAsState()
     val pluginSnippets by viewModel.pluginSnippets.collectAsState()
-    var showPluginMenu by remember { mutableStateOf(false) }
+    var showTagDialog by remember { mutableStateOf(false) }
+    var showPropertiesDialog by remember { mutableStateOf(false) }
+    var folderMenuExpanded by remember { mutableStateOf(false) }
+    var showNewFolderDialog by remember { mutableStateOf(false) }
+    val editorFontSize by viewModel.editorFontSize.collectAsState()
+    val editorMonospace by viewModel.editorMonospace.collectAsState()
 
     val handleExit = {
         viewModel.clearDraftForCurrentNote()
@@ -1809,76 +1907,53 @@ fun EditorScreen(
     var isEditing by remember { mutableStateOf(false) }
     var showDrawingDialog by remember { mutableStateOf(false) }
 
+    // The editor shows the body only. `frontmatterBlock` is the note's YAML
+    // header held aside verbatim and re-prepended on every write.
+    val frontmatterBlock = remember(editorContent) { Frontmatter.blockOf(editorContent) }
+    val editorBody = remember(editorContent) { Frontmatter.bodyOf(editorContent) }
+    val frontmatter = remember(editorContent) { Frontmatter.parse(editorContent) }
+
     var textFieldValue by remember {
         mutableStateOf(
             TextFieldValue(
-                text = editorContent,
-                selection = androidx.compose.ui.text.TextRange(editorContent.length)
+                text = editorBody,
+                selection = androidx.compose.ui.text.TextRange(editorBody.length)
             )
         )
     }
 
-    LaunchedEffect(editorContent) {
-        if (textFieldValue.text != editorContent) {
+    LaunchedEffect(editorBody) {
+        if (textFieldValue.text != editorBody) {
             textFieldValue = textFieldValue.copy(
-                text = editorContent,
-                selection = if (textFieldValue.selection.start <= editorContent.length && textFieldValue.selection.end <= editorContent.length) {
+                text = editorBody,
+                selection = if (textFieldValue.selection.start <= editorBody.length && textFieldValue.selection.end <= editorBody.length) {
                     textFieldValue.selection
                 } else {
-                    androidx.compose.ui.text.TextRange(editorContent.length)
+                    androidx.compose.ui.text.TextRange(editorBody.length)
                 }
             )
         }
     }
 
-    fun insertMarkdown(syntax: String, suffix: String = "") {
-        val text = textFieldValue.text
-        val selection = textFieldValue.selection
-        val start = selection.start
-        val end = selection.end
+    /** Persist an edited body, restoring the front-matter block ahead of it. */
+    fun pushBody(newTitle: String, newBody: String) {
+        viewModel.onNoteTextChanged(newTitle, frontmatterBlock + newBody)
+    }
 
-        val selectedText = text.substring(start, end)
-        // A trailing space marks a line prefix (headings, lists, quotes, tasks) -
-        // those get no closing token. Wrap tokens (**, *, ~~, `) mirror themselves.
-        val isLinePrefix = syntax.endsWith(" ")
-        val actualSuffix = when {
-            suffix.isNotEmpty() -> suffix
-            isLinePrefix -> ""
-            else -> syntax
-        }
-        val newText = text.substring(0, start) + syntax + selectedText + actualSuffix + text.substring(end)
-        
-        val newSelectionStart = if (start == end) {
-            start + syntax.length
-        } else {
-            start + syntax.length + selectedText.length + actualSuffix.length
-        }
-        
-        val newSelectionEnd = if (start == end) {
-            start + syntax.length
-        } else {
-            newSelectionStart
-        }
-        
-        textFieldValue = TextFieldValue(
-            text = newText,
-            selection = androidx.compose.ui.text.TextRange(newSelectionStart, newSelectionEnd)
-        )
-        viewModel.onNoteTextChanged(editorTitle, newText)
+    // Undo/redo stack for this note. Reset when a different note is opened so
+    // undo can't walk back into the previous note's text.
+    val history = remember { EditorHistory(textFieldValue) }
+    LaunchedEffect(noteId) { history.reset(textFieldValue) }
+
+    /** Apply an edit from the toolbar: record it as its own undo step, then autosave. */
+    fun applyEdit(newValue: TextFieldValue) {
+        textFieldValue = newValue
+        history.pushImmediate(newValue)
+        pushBody(editorTitle, newValue.text)
     }
 
     fun insertTextAtCursor(insertedText: String) {
-        val text = textFieldValue.text
-        val selection = textFieldValue.selection
-        val start = selection.start
-        val end = selection.end
-        val newText = text.substring(0, start) + insertedText + text.substring(end)
-        val cursor = start + insertedText.length
-        textFieldValue = TextFieldValue(
-            text = newText,
-            selection = TextRange(cursor)
-        )
-        viewModel.onNoteTextChanged(editorTitle, newText)
+        applyEdit(insertInline(textFieldValue, insertedText))
     }
 
     val imagePicker = rememberLauncherForActivityResult(
@@ -2049,112 +2124,214 @@ fun EditorScreen(
         )
     }
 
-    val editorToolbar: @Composable () -> Unit = {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            tonalElevation = 3.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { insertMarkdown("**") }, modifier = Modifier.testTag("format_bold_button")) {
-                    Icon(Icons.Default.FormatBold, contentDescription = "Format Bold")
-                }
-                IconButton(onClick = { insertMarkdown("*") }, modifier = Modifier.testTag("format_italic_button")) {
-                    Icon(Icons.Default.FormatItalic, contentDescription = "Format Italic")
-                }
-                IconButton(onClick = { insertMarkdown("~~") }, modifier = Modifier.testTag("format_strikethrough_button")) {
-                    Icon(Icons.Default.FormatStrikethrough, contentDescription = "Format Strikethrough")
-                }
-                IconButton(onClick = { insertMarkdown("## ", "") }, modifier = Modifier.testTag("format_heading2_button")) {
-                    Text("H2", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                }
-                IconButton(onClick = { insertMarkdown("- ", "") }, modifier = Modifier.testTag("format_list_button")) {
-                    Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = "Format Unordered List")
-                }
-                IconButton(onClick = { insertMarkdown("> ", "") }, modifier = Modifier.testTag("format_quote_button")) {
-                    Icon(Icons.Default.FormatQuote, contentDescription = "Blockquote")
-                }
-                IconButton(onClick = { insertMarkdown("`") }, modifier = Modifier.testTag("format_code_button")) {
-                    Icon(Icons.Default.Code, contentDescription = "Inline Code")
-                }
-                IconButton(onClick = { insertMarkdown("[", "](url)") }, modifier = Modifier.testTag("format_link_button")) {
-                    Icon(Icons.Default.InsertLink, contentDescription = "Link")
-                }
-                IconButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.testTag("add_image_button")) {
-                    Icon(Icons.Default.Image, contentDescription = "Add image")
-                }
-                if (pluginCommands.isNotEmpty() || pluginSnippets.isNotEmpty()) {
-                    Box {
-                        IconButton(onClick = { showPluginMenu = true }, modifier = Modifier.testTag("plugin_commands_button")) {
-                            Icon(Icons.Default.Extension, contentDescription = "Plugin commands")
-                        }
-                        DropdownMenu(expanded = showPluginMenu, onDismissRequest = { showPluginMenu = false }) {
-                            pluginCommands.forEach { cmd ->
-                                DropdownMenuItem(
-                                    text = { Text(cmd.name) },
-                                    leadingIcon = { Icon(Icons.Default.Bolt, contentDescription = null) },
-                                    onClick = {
-                                        showPluginMenu = false
-                                        scope.launch {
-                                            val out = viewModel.runPluginCommand(cmd, textFieldValue.text)
-                                            if (out != null) {
-                                                textFieldValue = TextFieldValue(text = out, selection = TextRange(out.length))
-                                                viewModel.onNoteTextChanged(editorTitle, out)
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.testTag("plugin_command_${cmd.pluginId}_${cmd.id}")
-                                )
-                            }
-                            pluginSnippets.forEach { snippet ->
-                                DropdownMenuItem(
-                                    text = { Text(snippet.name) },
-                                    leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null) },
-                                    onClick = {
-                                        showPluginMenu = false
-                                        insertTextAtCursor(snippet.content)
-                                    },
-                                    modifier = Modifier.testTag("plugin_snippet_${snippet.id}")
-                                )
-                            }
-                        }
+    // Toolbar actions contributed by enabled community plugins (script commands + snippets).
+    val pluginActions = remember(pluginCommands, pluginSnippets) {
+        pluginCommands.map { PluginAction(id = "cmd_${it.pluginId}_${it.id}", name = it.name, isCommand = true) } +
+            pluginSnippets.map { PluginAction(id = "snip_${it.id}", name = it.name, isCommand = false) }
+    }
+
+    val onPluginAction: (PluginAction) -> Unit = { action ->
+        if (action.isCommand) {
+            val command = pluginCommands.firstOrNull { "cmd_${it.pluginId}_${it.id}" == action.id }
+            if (command != null) {
+                scope.launch {
+                    // Plugins see the body only — they must not rewrite properties.
+                    val out = viewModel.runPluginCommand(command, textFieldValue.text)
+                    if (out != null) {
+                        applyEdit(TextFieldValue(text = out, selection = TextRange(out.length)))
                     }
                 }
             }
+        } else {
+            pluginSnippets.firstOrNull { "snip_${it.id}" == action.id }?.let { snippet ->
+                applyEdit(insertInline(textFieldValue, snippet.content))
+            }
         }
+    }
+
+    val editorToolbar: @Composable () -> Unit = {
+        EditorToolbar(
+            value = textFieldValue,
+            onValueChange = { applyEdit(it) },
+            onPickImage = { imagePicker.launch("image/*") },
+            onDraw = { showDrawingDialog = true },
+            fontSize = editorFontSize,
+            onFontSizeChange = { viewModel.setEditorFontSize(it) },
+            monospace = editorMonospace,
+            onMonospaceChange = { viewModel.setEditorMonospace(it) },
+            canUndo = history.canUndo,
+            onUndo = {
+                history.undo()?.let { restored ->
+                    textFieldValue = restored
+                    pushBody(editorTitle, restored.text)
+                }
+            },
+            canRedo = history.canRedo,
+            onRedo = {
+                history.redo()?.let { restored ->
+                    textFieldValue = restored
+                    pushBody(editorTitle, restored.text)
+                }
+            },
+            pluginActions = pluginActions,
+            onPluginAction = onPluginAction
+        )
+    }
+
+    // Live document stats for the editor subtitle.
+    val wordCount = remember(editorBody) {
+        editorBody.split(Regex("\\s+")).count { it.isNotBlank() }
     }
 
     Scaffold(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("Markdown Note", fontWeight = FontWeight.Bold) },
+                    // No note title here — the Title field sits directly
+                    // below it. Just the live word count and save state.
+                    title = {
+                        Text(
+                            text = when (saveStatus) {
+                                SaveStatus.Saving -> "Saving…"
+                                SaveStatus.Saved -> "$wordCount ${if (wordCount == 1) "word" else "words"} · saved"
+                                SaveStatus.Idle -> "$wordCount ${if (wordCount == 1) "word" else "words"}"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.testTag("editor_status_line")
+                        )
+                    },
                     navigationIcon = {
                         IconButton(onClick = handleExit) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     },
                     actions = {
-                        IconButton(
-                            onClick = { /* TODO: handle sparkle */ },
-                            modifier = Modifier
-                                .background(Color(0xFF8A2BE2), CircleShape)
-                                .size(32.dp)
-                                .padding(4.dp)
-                        ) {
-                            Icon(Icons.Default.Bolt, contentDescription = "Sparkle", tint = Color.White)
+                        // Tags and folder are editor-only, so they live here as
+                        // icons rather than as rows above the note body.
+                        if (isEditing) {
+                            IconButton(
+                                onClick = { showTagDialog = true },
+                                modifier = Modifier.size(40.dp).testTag("editor_tags_button")
+                            ) {
+                                BadgedBox(
+                                    badge = {
+                                        val count = note?.tags?.size ?: 0
+                                        if (count > 0) Badge { Text("$count") }
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Label,
+                                        contentDescription = "Tags",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { showPropertiesDialog = true },
+                                modifier = Modifier.size(40.dp).testTag("editor_properties_button")
+                            ) {
+                                Icon(
+                                    Icons.Default.Tune,
+                                    contentDescription = "Properties",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Box {
+                                IconButton(
+                                    onClick = { folderMenuExpanded = true },
+                                    modifier = Modifier.size(40.dp).testTag("editor_folder_button")
+                                ) {
+                                    Icon(
+                                        imageVector = if (note?.folder.isNullOrBlank()) {
+                                            Icons.Default.Folder
+                                        } else {
+                                            Icons.Default.FolderOpen
+                                        },
+                                        contentDescription = "Folder",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = folderMenuExpanded,
+                                    onDismissRequest = { folderMenuExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Uncategorized") },
+                                        trailingIcon = {
+                                            if (note?.folder.isNullOrBlank()) {
+                                                Icon(Icons.Default.Check, contentDescription = null)
+                                            }
+                                        },
+                                        onClick = {
+                                            folderMenuExpanded = false
+                                            note?.let { viewModel.setNoteFolder(it, null) }
+                                        },
+                                        modifier = Modifier.testTag("editor_folder_item_uncategorized")
+                                    )
+                                    availableFolders.forEach { folder ->
+                                        DropdownMenuItem(
+                                            text = { Text(folder) },
+                                            trailingIcon = {
+                                                if (note?.folder == folder) {
+                                                    Icon(Icons.Default.Check, contentDescription = null)
+                                                }
+                                            },
+                                            onClick = {
+                                                folderMenuExpanded = false
+                                                note?.let { viewModel.setNoteFolder(it, folder) }
+                                            },
+                                            modifier = Modifier.testTag("editor_folder_item_$folder")
+                                        )
+                                    }
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text("+ New Folder...") },
+                                        onClick = {
+                                            folderMenuExpanded = false
+                                            showNewFolderDialog = true
+                                        },
+                                        modifier = Modifier.testTag("editor_folder_item_new")
+                                    )
+                                }
+                            }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TextButton(onClick = { /* Handle Save manually if needed, but it's autosaved */ }) {
-                            Text("SAVE", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        // Edit / Preview. Without this the editor is unreachable.
+                        IconButton(
+                            onClick = { isEditing = !isEditing },
+                            modifier = Modifier.size(40.dp).testTag("toggle_edit_preview_button")
+                        ) {
+                            Icon(
+                                imageVector = if (isEditing) Icons.Default.Visibility else Icons.Default.Edit,
+                                contentDescription = if (isEditing) "Preview note" else "Edit note",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = onNavigateToHistory,
+                            modifier = Modifier.size(40.dp).testTag("note_history_button")
+                        ) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = "Version history",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.saveNow() },
+                            modifier = Modifier.size(40.dp).testTag("editor_save_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save note",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -2163,12 +2340,62 @@ fun EditorScreen(
                 )
             }
         },
-        bottomBar = {
-            if (isEditing) {
-                editorToolbar()
-            }
-        }
+        // The toolbar is placed at the end of the content column rather than in
+        // `bottomBar` so it can sit flush on the keyboard: Scaffold positions a
+        // bottom bar against the window, which double-counts the IME inset.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
+        if (showPropertiesDialog) {
+            PropertiesDialog(
+                frontmatter = frontmatter,
+                onDismiss = { showPropertiesDialog = false }
+            )
+        }
+
+        if (showTagDialog) {
+            TagDialog(
+                tags = note?.tags ?: emptyList(),
+                onTagsChanged = { viewModel.updateTags(it) },
+                onDismiss = { showTagDialog = false }
+            )
+        }
+
+        if (showNewFolderDialog) {
+            var newFolderNameText by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showNewFolderDialog = false },
+                title = { Text("Add Folder") },
+                text = {
+                    OutlinedTextField(
+                        value = newFolderNameText,
+                        onValueChange = { newFolderNameText = it },
+                        placeholder = { Text("Folder Name") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("editor_new_folder_input")
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val name = newFolderNameText.trim()
+                            if (name.isNotBlank()) {
+                                note?.let { viewModel.setNoteFolder(it, name) }
+                            }
+                            showNewFolderDialog = false
+                        },
+                        modifier = Modifier.testTag("editor_new_folder_confirm")
+                    ) {
+                        Text("Create")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNewFolderDialog = false }) { Text("Cancel") }
+                }
+            )
+        }
+
         note?.let {
             if (isEditing) {
                 Column(
@@ -2176,30 +2403,25 @@ fun EditorScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                         .background(MaterialTheme.colorScheme.background)
-                        .imePadding()
-                        .padding(16.dp)
                 ) {
+                  Column(modifier = Modifier.weight(1f).padding(16.dp)) {
                     EditorInputs(
                         title = editorTitle,
                         textFieldValue = textFieldValue,
                         onTitleChanged = { newTitle ->
-                            viewModel.onNoteTextChanged(newTitle, textFieldValue.text)
+                            pushBody(newTitle, textFieldValue.text)
                         },
                         onContentChanged = { newValue ->
                             textFieldValue = newValue
-                            viewModel.onNoteTextChanged(editorTitle, newValue.text)
+                            history.record(newValue)
+                            pushBody(editorTitle, newValue.text)
                         },
-                        tags = note?.tags ?: emptyList(),
-                        onTagsChanged = { newTags ->
-                            viewModel.updateTags(newTags)
-                        },
-                        currentFolder = note?.folder,
-                        availableFolders = availableFolders,
-                        onFolderChanged = { folder ->
-                            note?.let { viewModel.setNoteFolder(it, folder) }
-                        },
+                        fontSize = editorFontSize,
+                        monospace = editorMonospace,
                         backlinksSection = backlinksSection
                     )
+                  }
+                  editorToolbar()
                 }
             } else {
                 MarkdownPreview(
@@ -2207,6 +2429,7 @@ fun EditorScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
+                        .navigationBarsPadding()
                         .background(MaterialTheme.colorScheme.background),
                     onWikiLinkClick = onWikiLinkClick,
                     onHashtagClick = { hashtag ->
@@ -2367,13 +2590,12 @@ fun EditorInputs(
     textFieldValue: TextFieldValue,
     onTitleChanged: (String) -> Unit,
     onContentChanged: (TextFieldValue) -> Unit,
-    tags: List<String>,
-    onTagsChanged: (List<String>) -> Unit,
-    currentFolder: String?,
-    availableFolders: List<String>,
-    onFolderChanged: (String?) -> Unit,
+    fontSize: Int = EditorPreferences.DEFAULT_FONT_SIZE,
+    monospace: Boolean = true,
     backlinksSection: @Composable (() -> Unit)? = null
 ) {
+    // Tags and the folder live in the top bar (tag / folder icons) so the
+    // writing surface is nothing but the title and the note body.
     Column(modifier = Modifier.fillMaxSize()) {
         TextField(
             value = title,
@@ -2391,207 +2613,6 @@ fun EditorInputs(
                 .fillMaxWidth()
                 .testTag("note_title_input")
         )
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.Label,
-                contentDescription = "Tags",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            
-            var showAddTagDialog by remember { mutableStateOf(false) }
-            
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                items(tags) { tag ->
-                    InputChip(
-                        selected = true,
-                        // Chip body is a no-op; only the trailing x removes the tag,
-                        // so an accidental tap can't silently delete it.
-                        onClick = { },
-                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Remove $tag",
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .clickable { onTagsChanged(tags - tag) }
-                                    .testTag("remove_tag_${tag}")
-                            )
-                        },
-                        modifier = Modifier.testTag("editor_tag_chip_$tag")
-                    )
-                }
-                
-                item {
-                    IconButton(
-                        onClick = { showAddTagDialog = true },
-                        modifier = Modifier
-                            .testTag("add_tag_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add Tag",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-            
-            if (showAddTagDialog) {
-                var newTagText by remember { mutableStateOf("") }
-                AlertDialog(
-                    onDismissRequest = { showAddTagDialog = false },
-                    title = { Text("Add Tag") },
-                    text = {
-                        OutlinedTextField(
-                            value = newTagText,
-                            onValueChange = { newTagText = it.trim().lowercase() },
-                            placeholder = { Text("e.g. work, personal, idea") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("add_tag_text_input")
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (newTagText.isNotEmpty() && !tags.contains(newTagText)) {
-                                    onTagsChanged(tags + newTagText)
-                                }
-                                showAddTagDialog = false
-                            },
-                            modifier = Modifier.testTag("add_tag_confirm_button")
-                        ) {
-                            Text("Add")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { showAddTagDialog = false }
-                        ) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Folder,
-                contentDescription = "Folder",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            
-            var folderMenuExpanded by remember { mutableStateOf(false) }
-            var showNewFolderDialogInEditor by remember { mutableStateOf(false) }
-
-            Box {
-                SuggestionChip(
-                    onClick = { folderMenuExpanded = true },
-                    label = { Text(currentFolder ?: "Uncategorized", style = MaterialTheme.typography.labelSmall) },
-                    modifier = Modifier.testTag("editor_folder_chip")
-                )
-                
-                DropdownMenu(
-                    expanded = folderMenuExpanded,
-                    onDismissRequest = { folderMenuExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Uncategorized") },
-                        onClick = {
-                            onFolderChanged(null)
-                            folderMenuExpanded = false
-                        },
-                        modifier = Modifier.testTag("editor_folder_item_uncategorized")
-                    )
-                    
-                    availableFolders.forEach { folder ->
-                        DropdownMenuItem(
-                            text = { Text(folder) },
-                            onClick = {
-                                onFolderChanged(folder)
-                                folderMenuExpanded = false
-                            },
-                            modifier = Modifier.testTag("editor_folder_item_$folder")
-                        )
-                    }
-                    
-                    HorizontalDivider()
-                    
-                    DropdownMenuItem(
-                        text = { Text("+ New Folder...") },
-                        onClick = {
-                            folderMenuExpanded = false
-                            showNewFolderDialogInEditor = true
-                        },
-                        modifier = Modifier.testTag("editor_folder_item_new")
-                    )
-                }
-            }
-
-            if (showNewFolderDialogInEditor) {
-                var newFolderNameText by remember { mutableStateOf("") }
-                AlertDialog(
-                    onDismissRequest = { showNewFolderDialogInEditor = false },
-                    title = { Text("Add Folder") },
-                    text = {
-                        OutlinedTextField(
-                            value = newFolderNameText,
-                            onValueChange = { newFolderNameText = it },
-                            placeholder = { Text("Folder Name") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("editor_new_folder_input")
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (newFolderNameText.isNotBlank()) {
-                                    onFolderChanged(newFolderNameText.trim())
-                                }
-                                showNewFolderDialogInEditor = false
-                            },
-                            modifier = Modifier.testTag("editor_new_folder_confirm")
-                        ) {
-                            Text("Create")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = { showNewFolderDialogInEditor = false }
-                        ) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-        }
 
         Box(
             modifier = Modifier
@@ -2600,6 +2621,7 @@ fun EditorInputs(
                 .background(MaterialTheme.colorScheme.outlineVariant)
         )
         Spacer(modifier = Modifier.height(8.dp))
+
         val isDark = isSystemInDarkTheme()
         val markdownTransformation = remember(isDark) { MarkdownVisualTransformation(isDark) }
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -2607,7 +2629,11 @@ fun EditorInputs(
                 value = textFieldValue,
                 onValueChange = onContentChanged,
                 placeholder = { Text("Type your markdown here...") },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = MonoFontFamily),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    fontFamily = if (monospace) MonoFontFamily else SansFontFamily,
+                    fontSize = fontSize.sp,
+                    lineHeight = (fontSize * 1.5f).sp
+                ),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -2624,6 +2650,89 @@ fun EditorInputs(
             backlinksSection()
         }
     }
+}
+
+/**
+ * Tag editor for the top bar's tag button: the note's tags as removable chips
+ * plus a field to add another.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TagDialog(
+    tags: List<String>,
+    onTagsChanged: (List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newTagText by remember { mutableStateOf("") }
+
+    fun commit() {
+        val tag = newTagText.trim().lowercase()
+        if (tag.isNotEmpty() && tag !in tags) {
+            onTagsChanged(tags + tag)
+        }
+        newTagText = ""
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Tags") },
+        text = {
+            Column {
+                if (tags.isEmpty()) {
+                    Text(
+                        text = "No tags yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tags.forEach { tag ->
+                            InputChip(
+                                selected = true,
+                                // Only the trailing x removes a tag, so an
+                                // accidental tap on the chip can't delete it.
+                                onClick = { },
+                                label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Remove $tag",
+                                        modifier = Modifier
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .clickable { onTagsChanged(tags - tag) }
+                                            .testTag("remove_tag_${tag}")
+                                    )
+                                },
+                                modifier = Modifier.testTag("editor_tag_chip_$tag")
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = newTagText,
+                    onValueChange = { newTagText = it },
+                    placeholder = { Text("e.g. work, personal, idea") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("add_tag_text_input")
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { commit() },
+                modifier = Modifier.testTag("add_tag_confirm_button")
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        }
+    )
 }
 
 @Composable
@@ -3962,7 +4071,10 @@ fun MarkdownPreview(
     onWikiLinkClick: ((String) -> Unit)? = null,
     onHashtagClick: ((String) -> Unit)? = null
 ) {
-    val lines = markdown.lines()
+    // YAML front matter is shown as a Properties card, never as body text.
+    val frontmatter = remember(markdown) { Frontmatter.parse(markdown) }
+    val body = remember(markdown) { Frontmatter.bodyOf(markdown) }
+    val lines = body.lines()
     val status = MaterialTheme.octoStatus
     Column(
         modifier = modifier
@@ -3971,16 +4083,74 @@ fun MarkdownPreview(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        if (markdown.isBlank()) {
+        if (frontmatter != null) {
+            PropertiesCard(frontmatter = frontmatter)
+        }
+        if (body.isBlank() && frontmatter == null) {
             Text(
                 text = "Nothing to preview yet. Start typing in the Editor!",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
-        } else {
-            lines.forEach { line ->
-                val imageMatch = Regex("""!\[([^]]*)]\(([^)]+)\)""").matchEntire(line.trim())
+        } else if (body.isNotBlank()) {
+            // Index-based walk (not forEach) because fenced code, tables and
+            // callouts are multi-line blocks that consume following lines.
+            var index = 0
+            while (index < lines.size) {
+                val line = lines[index]
+                val trimmed = line.trim()
+                val imageMatch = Regex("""!\[([^]]*)]\(([^)]+)\)""").matchEntire(trimmed)
+                val calloutMatch = CALLOUT_REGEX.find(trimmed)
+
                 when {
+                    // ``` fenced code block ```
+                    trimmed.startsWith("```") -> {
+                        val language = trimmed.removePrefix("```").trim()
+                        val body = mutableListOf<String>()
+                        var cursor = index + 1
+                        while (cursor < lines.size && !lines[cursor].trim().startsWith("```")) {
+                            body += lines[cursor]
+                            cursor++
+                        }
+                        CodeBlockView(body.joinToString("\n"), language, status)
+                        index = if (cursor < lines.size) cursor + 1 else cursor
+                    }
+
+                    // | table | with a | --- | divider row underneath
+                    isTableRow(line) && index + 1 < lines.size && isTableDivider(lines[index + 1]) -> {
+                        val rows = mutableListOf(splitTableRow(line))
+                        var cursor = index + 2
+                        while (cursor < lines.size && isTableRow(lines[cursor])) {
+                            rows += splitTableRow(lines[cursor])
+                            cursor++
+                        }
+                        MarkdownTableView(rows, status, onWikiLinkClick, onHashtagClick)
+                        index = cursor
+                    }
+
+                    // > [!NOTE] callout, with its indented body
+                    calloutMatch != null -> {
+                        val kind = calloutMatch.groupValues[1].uppercase()
+                        val heading = calloutMatch.groupValues[2].trim()
+                        val body = mutableListOf<String>()
+                        var cursor = index + 1
+                        while (cursor < lines.size && lines[cursor].trimStart().startsWith(">")) {
+                            body += lines[cursor].trimStart().removePrefix(">").removePrefix(" ")
+                            cursor++
+                        }
+                        CalloutView(kind, heading, body.joinToString("\n").trim(), status, onWikiLinkClick, onHashtagClick)
+                        index = cursor
+                    }
+
+                    // Thematic break
+                    trimmed == "---" || trimmed == "***" || trimmed == "___" -> {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        index++
+                    }
+
                     imageMatch != null -> {
                         val description = imageMatch.groupValues[1].ifBlank { "Note image" }
                         val imagePath = imageMatch.groupValues[2]
@@ -4005,7 +4175,9 @@ fun MarkdownPreview(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        index++
                     }
+
                     line.startsWith("# ") -> {
                         Text(
                             text = line.substring(2),
@@ -4014,6 +4186,7 @@ fun MarkdownPreview(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
+                        index++
                     }
                     line.startsWith("## ") -> {
                         Text(
@@ -4023,6 +4196,7 @@ fun MarkdownPreview(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
+                        index++
                     }
                     line.startsWith("### ") -> {
                         Text(
@@ -4032,6 +4206,7 @@ fun MarkdownPreview(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(vertical = 2.dp)
                         )
+                        index++
                     }
                     line.startsWith("> ") -> {
                         Row(
@@ -4056,6 +4231,7 @@ fun MarkdownPreview(
                                 onHashtagClick = onHashtagClick
                             )
                         }
+                        index++
                     }
                     line.startsWith("- [ ] ") || line.startsWith("- [x] ") || line.startsWith("- [X] ") -> {
                         val checked = !line.startsWith("- [ ] ")
@@ -4078,6 +4254,33 @@ fun MarkdownPreview(
                                 onHashtagClick = onHashtagClick
                             )
                         }
+                        index++
+                    }
+                    // 1. ordered list item
+                    ORDERED_ITEM_REGEX.containsMatchIn(line) -> {
+                        val marker = ORDERED_ITEM_REGEX.find(line)!!.groupValues[1]
+                        Row(
+                            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text = "$marker. ",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            AutolinkText(
+                                text = autoLinkUrls(
+                                    parseInlineStyles(line.substringAfter("$marker. "), status),
+                                    MaterialTheme.colorScheme.primary
+                                ),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                onWikiLinkClick = onWikiLinkClick,
+                                onHashtagClick = onHashtagClick
+                            )
+                        }
+                        index++
                     }
                     line.startsWith("- ") || line.startsWith("* ") -> {
                         Row(
@@ -4098,6 +4301,7 @@ fun MarkdownPreview(
                                 onHashtagClick = onHashtagClick
                             )
                         }
+                        index++
                     }
                     else -> {
                         if (line.isNotBlank()) {
@@ -4112,6 +4316,7 @@ fun MarkdownPreview(
                         } else {
                             Spacer(modifier = Modifier.height(8.dp))
                         }
+                        index++
                     }
                 }
             }
@@ -4119,6 +4324,153 @@ fun MarkdownPreview(
     }
 }
 
+private val CALLOUT_REGEX = Regex("""^>\s*\[!(\w+)]\s*(.*)$""")
+private val ORDERED_ITEM_REGEX = Regex("""^\s*(\d+)\. """)
+
+private fun isTableRow(line: String): Boolean = line.trim().startsWith("|") && line.trim().endsWith("|")
+
+private fun isTableDivider(line: String): Boolean =
+    isTableRow(line) && line.trim().trim('|').split("|").all { cell ->
+        cell.isNotBlank() && cell.trim().all { it == '-' || it == ':' || it == ' ' }
+    }
+
+private fun splitTableRow(line: String): List<String> =
+    line.trim().trim('|').split("|").map { it.trim() }
+
+/** Fenced code: monospaced, on a tinted card, with the language noted when given. */
+@Composable
+private fun CodeBlockView(code: String, language: String, status: OctoStatusColors) {
+    Surface(
+        color = status.codeBackground,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (language.isNotBlank()) {
+                Text(
+                    text = language,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+            Text(
+                text = code,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = MonoFontFamily),
+                color = status.code,
+                modifier = Modifier.horizontalScroll(rememberScrollState())
+            )
+        }
+    }
+}
+
+/** GitHub-style pipe table. The first row is treated as the header. */
+@Composable
+private fun MarkdownTableView(
+    rows: List<List<String>>,
+    status: OctoStatusColors,
+    onWikiLinkClick: ((String) -> Unit)?,
+    onHashtagClick: ((String) -> Unit)?
+) {
+    val columnCount = rows.maxOf { it.size }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(4.dp)) {
+            rows.forEachIndexed { rowIndex, cells ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    for (column in 0 until columnCount) {
+                        val cell = cells.getOrElse(column) { "" }
+                        Box(modifier = Modifier.weight(1f).padding(8.dp)) {
+                            AutolinkText(
+                                text = autoLinkUrls(parseInlineStyles(cell, status), MaterialTheme.colorScheme.primary),
+                                style = if (rowIndex == 0) {
+                                    MaterialTheme.typography.labelLarge
+                                } else {
+                                    MaterialTheme.typography.bodyMedium
+                                },
+                                color = MaterialTheme.colorScheme.onSurface,
+                                onWikiLinkClick = onWikiLinkClick,
+                                onHashtagClick = onHashtagClick
+                            )
+                        }
+                    }
+                }
+                if (rowIndex == 0) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+    }
+}
+
+/** Obsidian/GitHub callout: `> [!WARNING]` and friends, tinted by severity. */
+@Composable
+private fun CalloutView(
+    kind: String,
+    heading: String,
+    body: String,
+    status: OctoStatusColors,
+    onWikiLinkClick: ((String) -> Unit)?,
+    onHashtagClick: ((String) -> Unit)?
+) {
+    val accent = when (kind) {
+        "WARNING", "CAUTION" -> MaterialTheme.colorScheme.error
+        "TIP" -> status.syncOk
+        "IMPORTANT" -> status.syncPending
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val icon = when (kind) {
+        "WARNING", "CAUTION" -> Icons.Default.Warning
+        "TIP" -> Icons.Default.Lightbulb
+        "IMPORTANT" -> Icons.Default.PriorityHigh
+        else -> Icons.Default.Info
+    }
+    Surface(
+        color = accent.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(IntrinsicSize.Min)
+                    .background(accent)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = heading.ifBlank { kind.lowercase().replaceFirstChar { it.uppercase() } },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = accent
+                    )
+                }
+                if (body.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AutolinkText(
+                        text = autoLinkUrls(parseInlineStyles(body, status), MaterialTheme.colorScheme.primary),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        onWikiLinkClick = onWikiLinkClick,
+                        onHashtagClick = onHashtagClick
+                    )
+                }
+            }
+        }
+    }
+}
 fun autoLinkUrls(annotatedString: AnnotatedString, linkColor: Color): AnnotatedString {
     val text = annotatedString.text
     val urlRegex = """https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=]+""".toRegex()
@@ -4233,6 +4585,44 @@ fun parseInlineStyles(text: String, colors: OctoStatusColors): AnnotatedString {
                 } else {
                     append("~~")
                     i += 2
+                }
+            } else if (text.startsWith("==", i)) {
+                // ==highlight== (Obsidian/Pandoc mark syntax)
+                val end = text.indexOf("==", i + 2)
+                if (end != -1) {
+                    withStyle(
+                        SpanStyle(color = colors.highlight, background = colors.highlightBackground)
+                    ) {
+                        append(parseInlineStyles(text.substring(i + 2, end), colors))
+                    }
+                    i = end + 2
+                } else {
+                    append("==")
+                    i += 2
+                }
+            } else if (text.startsWith("^", i)) {
+                // ^superscript^ — single-line only, so a stray caret stays literal.
+                val end = text.indexOf("^", i + 1)
+                if (end != -1 && !text.substring(i + 1, end).contains('\n')) {
+                    withStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 11.sp)) {
+                        append(text.substring(i + 1, end))
+                    }
+                    i = end + 1
+                } else {
+                    append("^")
+                    i += 1
+                }
+            } else if (text.startsWith("~", i)) {
+                // ~subscript~ — checked after ~~strikethrough~~ above.
+                val end = text.indexOf("~", i + 1)
+                if (end != -1 && !text.substring(i + 1, end).contains('\n')) {
+                    withStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 11.sp)) {
+                        append(text.substring(i + 1, end))
+                    }
+                    i = end + 1
+                } else {
+                    append("~")
+                    i += 1
                 }
             } else if (text.startsWith("*", i)) {
                 val end = text.indexOf("*", i + 1)
