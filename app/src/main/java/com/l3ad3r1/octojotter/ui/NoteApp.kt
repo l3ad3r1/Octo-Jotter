@@ -467,7 +467,10 @@ fun NotesListScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchMode by viewModel.searchMode.collectAsState()
     val isSmartSearching by viewModel.isSmartSearching.collectAsState()
+    val embeddingModelReady by viewModel.embeddingModelReady.collectAsState()
+    val embeddingDownload by viewModel.embeddingDownload.collectAsState()
     var searchExpanded by remember { mutableStateOf(false) }
+    var showModelConsent by remember { mutableStateOf(false) }
     val sortBy by viewModel.sortBy.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val selectedFolder by viewModel.selectedFolder.collectAsState()
@@ -831,12 +834,60 @@ fun NotesListScreen(
                     )
                     FilterChip(
                         selected = searchMode == SearchMode.SMART,
-                        onClick = { viewModel.setSearchMode(SearchMode.SMART) },
+                        onClick = {
+                            viewModel.setSearchMode(SearchMode.SMART)
+                            // Offer the one-time model download for real embeddings;
+                            // Smart search still works meanwhile on the fallback.
+                            if (!embeddingModelReady &&
+                                viewModel.embeddingDownload.value !is NoteViewModel.EmbeddingDownload.InProgress
+                            ) {
+                                showModelConsent = true
+                            }
+                        },
                         leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
                         label = { Text("Smart") },
                         modifier = Modifier.testTag("search_mode_smart"),
                     )
+                    when (val dl = embeddingDownload) {
+                        is NoteViewModel.EmbeddingDownload.InProgress -> {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Text(
+                                dl.fraction?.let { "AI model ${(it * 100).toInt()}%" } ?: "AI model…",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        is NoteViewModel.EmbeddingDownload.Failed ->
+                            Text("Download failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        else ->
+                            if (searchMode == SearchMode.SMART && !embeddingModelReady) {
+                                Text("basic matching", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                    }
                 }
+            }
+
+            if (showModelConsent) {
+                AlertDialog(
+                    onDismissRequest = { showModelConsent = false },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                    title = { Text("Enable smarter search") },
+                    text = {
+                        Text(
+                            "Download the on-device AI model (${viewModel.embeddingModelSizeLabel}, one time). " +
+                                "It stays on your device, works offline, and your notes never leave the phone. " +
+                                "Until then, Smart search uses basic word matching.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.downloadEmbeddingModel()
+                            showModelConsent = false
+                        }) { Text("Download") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showModelConsent = false }) { Text("Not now") }
+                    },
+                )
             }
 
             // Sort + view controls in one horizontally scrollable row so they never

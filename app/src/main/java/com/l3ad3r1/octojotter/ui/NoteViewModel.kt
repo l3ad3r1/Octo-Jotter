@@ -46,6 +46,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import com.l3ad3r1.octojotter.ai.AiContainer
 import com.l3ad3r1.octojotter.ai.index.NoteIndexingWorker
+import com.l3ad3r1.octojotter.ai.model.ModelCatalog
+import com.l3ad3r1.octojotter.ai.model.ModelManager
 
 enum class SaveStatus {
     Idle,
@@ -646,7 +648,58 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         // Building the vector index is deferred and incremental; kick it off the
         // first time the user opts into Smart search so results are available.
         if (mode == SearchMode.SMART && semanticSearchAvailable) {
+            refreshEmbeddingModelReady()
             NoteIndexingWorker.enqueue(getApplication())
+        }
+    }
+
+    // --- Real embedding model (all-MiniLM-L6-v2) download-on-first-use ---
+
+    /** True once the ONNX embedding model + vocab are on disk; until then Smart
+     *  search runs on the lexical bag-of-words fallback. */
+    private val _embeddingModelReady = MutableStateFlow(false)
+    val embeddingModelReady: StateFlow<Boolean> = _embeddingModelReady.asStateFlow()
+
+    sealed interface EmbeddingDownload {
+        data object Idle : EmbeddingDownload
+        data class InProgress(val fraction: Float?) : EmbeddingDownload
+        data class Failed(val message: String) : EmbeddingDownload
+    }
+
+    private val _embeddingDownload = MutableStateFlow<EmbeddingDownload>(EmbeddingDownload.Idle)
+    val embeddingDownload: StateFlow<EmbeddingDownload> = _embeddingDownload.asStateFlow()
+
+    /** Human-readable one-time download size for the consent prompt. */
+    val embeddingModelSizeLabel: String
+        get() = ModelCatalog.EMBEDDING.let { e ->
+            val bytes = (e.model.sizeBytes ?: 0L) + (e.vocab.sizeBytes ?: 0L)
+            val mb = bytes / (1024.0 * 1024.0)
+            if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+        }
+
+    private fun refreshEmbeddingModelReady() {
+        _embeddingModelReady.value =
+            semanticSearchAvailable && aiContainer.modelManager.isEmbeddingReady()
+    }
+
+    /** Download the real embedding model, then re-index notes with it. */
+    fun downloadEmbeddingModel() {
+        if (_embeddingDownload.value is EmbeddingDownload.InProgress) return
+        viewModelScope.launch {
+            _embeddingDownload.value = EmbeddingDownload.InProgress(null)
+            val result = aiContainer.modelManager.downloadEmbeddingModel { progress ->
+                _embeddingDownload.value = EmbeddingDownload.InProgress(progress.fraction)
+            }
+            when (result) {
+                is ModelManager.Result.Failure ->
+                    _embeddingDownload.value = EmbeddingDownload.Failed(result.message)
+                else -> {
+                    _embeddingDownload.value = EmbeddingDownload.Idle
+                    refreshEmbeddingModelReady()
+                    // Re-index with the real embedder (drops stale fallback vectors).
+                    NoteIndexingWorker.enqueue(getApplication())
+                }
+            }
         }
     }
 
