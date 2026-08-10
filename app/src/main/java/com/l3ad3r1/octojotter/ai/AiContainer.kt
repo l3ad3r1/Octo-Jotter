@@ -12,7 +12,12 @@ import com.l3ad3r1.octojotter.ai.index.VectorStore
 import com.l3ad3r1.octojotter.ai.model.ChatModel
 import com.l3ad3r1.octojotter.ai.model.ModelCatalog
 import com.l3ad3r1.octojotter.ai.model.ModelManager
+import com.l3ad3r1.octojotter.data.local.AiPreferences
 import com.l3ad3r1.ondevice.OnDeviceLlm
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.l3ad3r1.octojotter.ai.search.SemanticSearch
 import com.l3ad3r1.octojotter.data.local.AppDatabase
 import com.l3ad3r1.octojotter.data.local.NoteDao
@@ -81,8 +86,19 @@ class AiContainer private constructor(
 
     // --- RAG chat (Phase 2) ---
 
-    /** The GGUF chat model (default; shared with Hermes when present). */
-    val chatModel: ChatModel = ModelCatalog.DEFAULT_CHAT
+    private val aiPrefs = AiPreferences(appContext)
+    private val containerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var selectedChatModelId: String = ModelCatalog.DEFAULT_CHAT.id
+
+    init {
+        // Keep the active chat model in sync with the user's persisted choice.
+        containerScope.launch { aiPrefs.selectedChatModelId.collect { selectedChatModelId = it } }
+    }
+
+    /** The GGUF chat model the user selected (default: Llama 3.2 1B; shared with Hermes when present). */
+    val chatModel: ChatModel get() = ModelCatalog.chatById(selectedChatModelId)
 
     /** True when the chat GGUF is on disk (possibly downloaded by Hermes). */
     fun isChatModelReady(): Boolean = modelManager.isChatModelPresent(chatModel)

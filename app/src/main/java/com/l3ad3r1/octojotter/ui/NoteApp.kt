@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import com.l3ad3r1.octojotter.ai.chat.AiChatActivity
+import com.l3ad3r1.octojotter.ai.settings.AiSettingsScreen
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -313,8 +314,12 @@ fun NoteApp(viewModel: NoteViewModel) {
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlugins = { navController.navigate("plugins") { launchSingleTop = true } },
                 onNavigateToDebug = { navController.navigate("debuglogs") { launchSingleTop = true } },
-                onNavigateToSyncHealth = { navController.navigate("sync_health") { launchSingleTop = true } }
+                onNavigateToSyncHealth = { navController.navigate("sync_health") { launchSingleTop = true } },
+                onNavigateToAiSettings = { navController.navigate("ai_settings") { launchSingleTop = true } }
             )
+        }
+        composable("ai_settings") {
+            AiSettingsScreen(onBack = { navController.popBackStack() })
         }
         composable("trash") {
             TrashScreen(
@@ -3313,7 +3318,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToDebug: () -> Unit = {},
-    onNavigateToSyncHealth: () -> Unit = {}
+    onNavigateToSyncHealth: () -> Unit = {},
+    onNavigateToAiSettings: () -> Unit = {}
 ) {
     // Tapping the version number 7x reveals the hidden debug log viewer.
     var versionTaps by remember { mutableStateOf(0) }
@@ -3793,6 +3799,42 @@ fun SettingsScreen(
                         )
                         Text(
                             text = "Browse and install themes and packs from the community.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateToAiSettings() }
+                        .padding(16.dp)
+                        .testTag("ai_settings_card"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "On-device AI",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Manage the chat (LLM) and semantic-search models. Runs fully on your device.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

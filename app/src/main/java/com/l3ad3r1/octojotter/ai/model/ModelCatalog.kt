@@ -41,6 +41,13 @@ data class EmbeddingModel(
 ) {
     val totalBytes: Long? =
         model.sizeBytes?.let { m -> vocab.sizeBytes?.let { v -> m + v } }
+
+    val totalSizeLabel: String
+        get() {
+            val bytes = totalBytes ?: return "unknown size"
+            val mb = bytes / (1024.0 * 1024.0)
+            return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+        }
 }
 
 /**
