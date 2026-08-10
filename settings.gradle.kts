@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "Octo Jotter"
 
 include(":app")
+include(":ondevice-llm")

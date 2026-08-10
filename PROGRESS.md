@@ -4,6 +4,92 @@
 Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add launcher icon + splash → build release APK → write README/docs.
 
 ## Done
+- **On-device AI, Phase 0 (2026-08-09):** stood up the `:ondevice-llm` module — the
+  runtime that later powers semantic search / RAG chat / completion (see
+  `docs/ON-DEVICE-AI.md`). No note data leaves the device.
+  - New Android library module `:ondevice-llm` (namespace `com.l3ad3r1.ondevice`,
+    arm64-v8a only, NDK 28.2, CMake 3.22.1). llama.cpp is a git submodule pinned to
+    `e3546c7` under `src/main/cpp/llama.cpp` — same commit Hermes builds.
+  - Native glue (`ai_chat.cpp`, `CMakeLists.txt`, `logging.h`) and the JNI wrapper
+    (`com.arm.aichat.InferenceEngine`/`InferenceEngineImpl`) were ported verbatim from
+    Hermes Agent Android. The JNI classes keep the `com.arm.aichat` package because the
+    native symbols are `Java_com_arm_aichat_*`; renaming would break the binding.
+  - Public entry point `com.l3ad3r1.ondevice.OnDeviceLlm.engine(context)` (the impl and
+    its factory are `internal`).
+  - App wiring: module registered in `settings.gradle.kts`; `android-library` added to
+    the version catalog and to the root `plugins {}` as `apply false` (required — the
+    application plugin already puts AGP on the classpath, else the library plugin fails
+    to resolve its version). `:app` gets `implementation(project(":ondevice-llm"))` and
+    `packaging.jniLibs.useLegacyPackaging = true` (ggml is built `GGML_BACKEND_DL=ON`, so
+    backends are dlopen()'d and must extract to the filesystem).
+  - Smoke test: `OnDeviceLlmDebugActivity` lives in `app/src/debug/` only (separate
+    "OctoJotter LLM Debug" launcher, never in release). Loads a GGUF from
+    `getExternalFilesDir/models/model.gguf` and streams tokens; self-disables off arm64.
+  - **Verified:** `:ondevice-llm:assembleDebug` and `:app:assembleDebug` both green.
+    `app-debug.apk` bundles `libai-chat.so` + `libllama.so` + `libggml*.so` (7 CPU
+    variants) + `libomp.so` under `lib/arm64-v8a/` only; the debug activity is in the
+    merged manifest.
+  - NOT done in Phase 0 (later phases): downloading an actual model, the real embedding
+    model (still the gap), and the full `LocalLlmProvider` message-assembly port.
+- **Obsidian Properties, phase 0 (2026-07-28):** `data/markdown/Frontmatter.kt` —
+  YAML front-matter parser + line-surgical writer. No UI yet; nothing else calls it.
+  - Parsed only when the file's FIRST line is `---` with a closing `---`, so a
+    mid-note thematic break is never mistaken for properties.
+  - Value types: text, number, checkbox, date, list (block + inline). Nested maps,
+    comments, odd spacing and duplicate keys pass through as `Unparsed`, never rewritten.
+  - Round-trip safety is the whole point (notes sync to the user's real Git repo and
+    `content` is hashed byte-for-byte): writers edit only the lines a key occupies,
+    list style (inline vs block) is preserved, CRLF is preserved, and writing a value
+    equal to the existing one is a no-op so the author's quoting/spacing survives.
+  - `tags()` / `aliases()` helpers ready for phase 2 indexing.
+  - 23 tests. The round-trip corpus caught two real fidelity bugs during development:
+    inline lists were being reflowed to block lists, and `'single'` quotes were dropped.
+  - **Phase 1 done (2026-07-28):** properties are no longer rendered as body text.
+    - `ui/editor/PropertiesCard.kt` — collapsible Properties card (key/value rows, lists
+      as chips, checkbox as a box, unparsed blocks in monospace) + `PropertiesDialog`.
+    - MarkdownPreview renders the card, then the BODY only.
+    - The editor edits the body only: `frontmatterBlock` is held aside and re-prepended on
+      every write (`pushBody`), so the stored `content` — and its sync hash — keeps the
+      block byte-for-byte. Undo/redo, plugin commands and the word count all work on the body.
+    - Top bar gains a Properties (tune) icon opening the read-only dialog; the block is not
+      editable from the editor yet (phase 3).
+    - NOTE: typing `---` at the top of a note and closing it turns that text into properties.
+      That is exactly what Obsidian does, so it is faithful rather than a bug.
+  - NEXT (phase 2): DB migration + index frontmatter tags/aliases (see the destructive-migration warning below).
+  - REMINDER for phase 2: AppDatabase uses `fallbackToDestructiveMigration(dropAllTables = true)`,
+    so bumping the schema version WITHOUT a MIGRATION_10_11 will wipe every local note.
+
+- **Editor overhaul + generated icon (2026-07-28, unreleased on v2.7):**
+  - New `ui/editor/` package: `MarkdownEditing.kt` (pure, unit-tested transforms —
+    toggleInline/toggleBlock/indent/snippets/active-format detection),
+    `EditorToolbar.kt` (grouped bar with active-state pills, ~22 actions),
+    `EditorHistory.kt` (undo/redo with typing coalesced at 700ms).
+  - Toolbar adds superscript, subscript, highlight, H1–H3 menu, numbered + task
+    lists, callouts, code block, table, divider, date, indent/outdent, undo/redo,
+    and an editor type-size / monospace menu (persisted via new `EditorPreferences`).
+  - MarkdownPreview rewritten to an index-based walk so it renders fenced code,
+    pipe tables, callouts, thematic breaks and ordered lists; parseInlineStyles
+    gained `==highlight==`, `^sup^`, `~sub~` (+ two new OctoStatusColors slots).
+  - FIXED two regressions from the v2.7 UI-polish commits: `isEditing` was never
+    set true (the editor was unreachable — preview only) and `onNavigateToHistory`
+    was never wired. Top bar now has an Edit/Preview toggle, history button, a
+    working SAVE (new `NoteViewModel.saveNow()`), and a live word count.
+  - Icon regenerated from math: `tools/generate_icon.py` (superellipse mantle +
+    8 eased-hook arms) emits the adaptive foreground VECTOR plus every raster
+    density; legacy PNG foregrounds deleted so the vector isn't shadowed. Brand
+    colour moved to indigo #4F46E5 (`octo_indigo`), monochrome/themed-icon layer added.
+  - Editor chrome (on-device feedback): tag + folder rows removed from the writing
+    surface; the top bar is icons only (tags with a count badge, folder menu,
+    edit/preview, save) and history shows in preview mode where there is room.
+  - FIXED on-device inset bugs found by running it on an S24: the toolbar sat
+    under the system nav bar, and moving it out of `Scaffold.bottomBar` was needed
+    because a bottom bar is positioned against the window, double-counting the IME
+    inset. The toolbar now ends the content column with `navigationBars ∪ ime` padding.
+  - Verification: 36 unit tests green (18 new in `MarkdownEditingTest`), Roborazzi
+    screenshots under `app/src/test/screenshots/`, `assembleDebug` green. Also
+    corrected a stale assertion in ExampleRobolectricTest (app_name has been
+    "Octo Jotter" since the package rename; the test still expected "Octojot").
+
 - **v2.5 released (2026-07-09):** versionCode 16 / versionName 2.5. Signed release APK
   (OctoJotter-v2.5.apk, v2 scheme, cert 640a69ce…) + GitHub release. Ships the Inkwell redesign.
 - **Inkwell redesign (2026-07-09):** retheme to the warm cream-paper design from the

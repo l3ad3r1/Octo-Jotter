@@ -24,6 +24,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
@@ -34,11 +35,19 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.l3ad3r1.octojotter.ai.AiContainer
+import com.l3ad3r1.octojotter.ai.index.NoteIndexingWorker
+import com.l3ad3r1.octojotter.ai.model.ModelCatalog
+import com.l3ad3r1.octojotter.ai.model.ModelManager
 
 enum class SaveStatus {
     Idle,
@@ -87,6 +96,17 @@ sealed class DownloadStatus {
     data class Failed(val message: String) : DownloadStatus()
 }
 
+/** Note-list search strategy. */
+enum class SearchMode { KEYWORD, SMART }
+
+/** Bundle of the four inputs that drive the searched/filtered note list. */
+private data class SearchParams(
+    val query: String,
+    val sort: String,
+    val tag: String?,
+    val mode: SearchMode,
+)
+
 class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val logTag = "OctoJotter"
 
@@ -128,6 +148,25 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
         }
+    }
+
+    // Editor typography preferences (driven by the toolbar's text-style menu)
+    private val editorPreferences = com.l3ad3r1.octojotter.data.local.EditorPreferences(application)
+    val editorFontSize: StateFlow<Int> = editorPreferences.fontSize
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            com.l3ad3r1.octojotter.data.local.EditorPreferences.DEFAULT_FONT_SIZE
+        )
+    val editorMonospace: StateFlow<Boolean> = editorPreferences.monospace
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    fun setEditorFontSize(size: Int) {
+        viewModelScope.launch { editorPreferences.setFontSize(size) }
+    }
+
+    fun setEditorMonospace(enabled: Boolean) {
+        viewModelScope.launch { editorPreferences.setMonospace(enabled) }
     }
 
     // Folder preferences
@@ -589,6 +628,99 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedTag = MutableStateFlow<String?>(null)
     val selectedTag: StateFlow<String?> = _selectedTag.asStateFlow()
 
+    // --- On-device semantic search (docs/ON-DEVICE-AI.md) ---
+    private val aiContainer by lazy { AiContainer.get(application) }
+
+    /** Whether this device can run semantic search (arm64 + enough RAM). */
+    val semanticSearchAvailable: Boolean by lazy { aiContainer.capability.supportsSemanticSearch }
+
+    // Keyword (substring) vs Smart (semantic) search. Defaults to keyword.
+    private val _searchMode = MutableStateFlow(SearchMode.KEYWORD)
+    val searchMode: StateFlow<SearchMode> = _searchMode.asStateFlow()
+
+    // True while a semantic query is running (drives a spinner in the search bar).
+    private val _isSmartSearching = MutableStateFlow(false)
+    val isSmartSearching: StateFlow<Boolean> = _isSmartSearching.asStateFlow()
+
+    fun setSearchMode(mode: SearchMode) {
+        if (_searchMode.value == mode) return
+        _searchMode.value = mode
+        // Building the vector index is deferred and incremental; kick it off the
+        // first time the user opts into Smart search so results are available.
+        if (mode == SearchMode.SMART && semanticSearchAvailable) {
+            refreshEmbeddingModelReady()
+            NoteIndexingWorker.enqueue(getApplication())
+        }
+    }
+
+    // --- Real embedding model (all-MiniLM-L6-v2) download-on-first-use ---
+
+    /** True once the ONNX embedding model + vocab are on disk; until then Smart
+     *  search runs on the lexical bag-of-words fallback. */
+    private val _embeddingModelReady = MutableStateFlow(false)
+    val embeddingModelReady: StateFlow<Boolean> = _embeddingModelReady.asStateFlow()
+
+    sealed interface EmbeddingDownload {
+        data object Idle : EmbeddingDownload
+        data class InProgress(val fraction: Float?) : EmbeddingDownload
+        data class Failed(val message: String) : EmbeddingDownload
+    }
+
+    private val _embeddingDownload = MutableStateFlow<EmbeddingDownload>(EmbeddingDownload.Idle)
+    val embeddingDownload: StateFlow<EmbeddingDownload> = _embeddingDownload.asStateFlow()
+
+    /** Human-readable one-time download size for the consent prompt. */
+    val embeddingModelSizeLabel: String
+        get() = ModelCatalog.EMBEDDING.let { e ->
+            val bytes = (e.model.sizeBytes ?: 0L) + (e.vocab.sizeBytes ?: 0L)
+            val mb = bytes / (1024.0 * 1024.0)
+            if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+        }
+
+    private fun refreshEmbeddingModelReady() {
+        _embeddingModelReady.value =
+            semanticSearchAvailable && aiContainer.modelManager.isEmbeddingReady()
+    }
+
+    /** Download the real embedding model, then re-index notes with it. */
+    fun downloadEmbeddingModel() {
+        if (_embeddingDownload.value is EmbeddingDownload.InProgress) return
+        viewModelScope.launch {
+            _embeddingDownload.value = EmbeddingDownload.InProgress(null)
+            val result = aiContainer.modelManager.downloadEmbeddingModel { progress ->
+                _embeddingDownload.value = EmbeddingDownload.InProgress(progress.fraction)
+            }
+            when (result) {
+                is ModelManager.Result.Failure ->
+                    _embeddingDownload.value = EmbeddingDownload.Failed(result.message)
+                else -> {
+                    _embeddingDownload.value = EmbeddingDownload.Idle
+                    refreshEmbeddingModelReady()
+                    // Re-index with the real embedder (drops stale fallback vectors).
+                    NoteIndexingWorker.enqueue(getApplication())
+                }
+            }
+        }
+    }
+
+    /**
+     * Semantic results as a note list, ordered by relevance. Runs the hybrid
+     * search off the main thread; any failure (e.g. model not ready) falls back
+     * to the keyword flow so the list is never empty due to an AI error.
+     */
+    private fun semanticNotesFlow(query: String, sort: String): Flow<List<NoteEntity>> = flow {
+        _isSmartSearching.value = true
+        try {
+            val results = aiContainer.search().search(query, k = 100)
+            val byId = noteDao.getAllNotes().associateBy { it.id }
+            emit(results.mapNotNull { byId[it.noteId] }.filter { it.deletedAt == null })
+        } finally {
+            _isSmartSearching.value = false
+        }
+    }.catch {
+        emitAll(repository.getNotesFilteredAndSorted(query, sort))
+    }.flowOn(Dispatchers.Default)
+
     // Selected folder filter state
     private val _selectedFolder = MutableStateFlow<String?>(null)
     val selectedFolder: StateFlow<String?> = _selectedFolder.asStateFlow()
@@ -631,17 +763,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
 
-    // Filter notes by query, sort, and tag from the DB (Single Source of Truth)
+    // Filter notes by query, sort, and tag from the DB (Single Source of Truth).
+    // When Smart search is on and there's a query (and no tag filter), the list
+    // comes from the semantic index instead of the keyword LIKE query.
     @OptIn(ExperimentalCoroutinesApi::class)
-    val notesWithTagFiltering: StateFlow<List<NoteEntity>> = combine(_searchQuery, _sortBy, _selectedTag) { query, sort, tag ->
-        Triple(query, sort, tag)
-    }.flatMapLatest { (query, sort, tag) ->
-        if (tag == null) {
-            repository.getNotesFilteredAndSorted(query, sort)
-        } else {
-            repository.getNotesByTag(tag)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val notesWithTagFiltering: StateFlow<List<NoteEntity>> =
+        combine(_searchQuery, _sortBy, _selectedTag, _searchMode) { query, sort, tag, mode ->
+            SearchParams(query, sort, tag, mode)
+        }.flatMapLatest { p ->
+            when {
+                p.tag != null -> repository.getNotesByTag(p.tag)
+                p.mode == SearchMode.SMART && p.query.isNotBlank() && semanticSearchAvailable ->
+                    semanticNotesFlow(p.query, p.sort)
+                else -> repository.getNotesFilteredAndSorted(p.query, p.sort)
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Notes hidden from the list while a "deleted — Undo" Snackbar is showing.
     // The actual delete is only committed once the Snackbar is dismissed without Undo.
@@ -1023,6 +1159,30 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             repository.deleteDraftByNoteId(note.id)
             
             // Trigger background WorkManager sync immediately
+            triggerBackgroundSync()
+        }
+    }
+
+    /**
+     * Flush the editor to the database now, skipping the auto-save debounce.
+     * Backs the editor's SAVE button so an explicit save is actually explicit.
+     */
+    fun saveNow() {
+        val note = _editingNote.value ?: return
+        autoSaveJob?.cancel()
+        draftSaveJob?.cancel()
+        _saveStatus.value = SaveStatus.Saving
+        viewModelScope.launch {
+            val updated = note.copy(
+                title = _editorTitle.value,
+                content = _editorContent.value,
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = true
+            )
+            repository.updateNote(updated)
+            _editingNote.value = updated
+            _saveStatus.value = SaveStatus.Saved
+            repository.deleteDraftByNoteId(note.id)
             triggerBackgroundSync()
         }
     }

@@ -20,6 +20,8 @@ data class OctoStatusColors(
   val hashtag: Color,
   val code: Color,
   val codeBackground: Color,
+  val highlight: Color,
+  val highlightBackground: Color,
 )
 
 val LightStatusColors = OctoStatusColors(
@@ -30,6 +32,8 @@ val LightStatusColors = OctoStatusColors(
   hashtag = Color(0xFF4F46E5),
   code = Color(0xFFBE123C),
   codeBackground = Color(0xFFF3F4F6),
+  highlight = Color(0xFF422006),
+  highlightBackground = Color(0xFFFEF08A),
 )
 
 val DarkStatusColors = OctoStatusColors(
@@ -40,6 +44,8 @@ val DarkStatusColors = OctoStatusColors(
   hashtag = Color(0xFF818CF8),
   code = Color(0xFFFDA4AF),
   codeBackground = Color(0xFF27272A),
+  highlight = Color(0xFF1C1917),
+  highlightBackground = Color(0xFFCA8A04),
 )
 
 val LocalOctoStatusColors = staticCompositionLocalOf { LightStatusColors }

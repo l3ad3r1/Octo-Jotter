@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only manifest. Merged into debug builds only; never ships in release.
+  Registers the on-device AI debug activities so they can be launched explicitly
+  (e.g. `adb shell am start -n <pkg>/<activity>`) for development. They are NOT
+  launcher entries: Octo Jotter shows a single app icon. Reach the real AI
+  features from the app UI (top-bar chat, the Keyword/Smart search toggle).
+  See docs/ON-DEVICE-AI.md.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <activity
+            android:name="com.l3ad3r1.octojotter.ai.debug.OnDeviceLlmDebugActivity"
+            android:exported="true"
+            android:label="OctoJotter LLM Debug" />
+
+        <activity
+            android:name="com.l3ad3r1.octojotter.ai.debug.SemanticSearchDebugActivity"
+            android:exported="true"
+            android:label="OctoJotter Search Debug" />
+
+        <activity
+            android:name="com.l3ad3r1.octojotter.ai.debug.ModelManagerDebugActivity"
+            android:exported="true"
+            android:label="OctoJotter Model Debug" />
+    </application>
+
+</manifest>

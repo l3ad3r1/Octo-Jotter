@@ -22,3 +22,7 @@ debug.keystore
 /build-debug.log
 /build-release.log
 build-*.log
+
+# Python bytecode (icon tooling)
+__pycache__/
+*.pyc
