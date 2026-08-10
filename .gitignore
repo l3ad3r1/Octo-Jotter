@@ -26,3 +26,6 @@ build-*.log
 # Python bytecode (icon tooling)
 __pycache__/
 *.pyc
+
+# local test APK artifacts (not distribution releases)
+OctoJotter-*-phase2-*.apk

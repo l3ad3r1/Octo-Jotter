@@ -60,7 +60,10 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            // 3.31.6 ships ninja 1.12.x; the SDK's 3.22.1 ninja (1.10.2) crashes
+            // (0xC0000005) building the multi-target ggml graph for the Release
+            // variant on Windows. Newer ninja fixes it and yields a fresh .cxx dir.
+            version = "3.31.6"
         }
     }
 
