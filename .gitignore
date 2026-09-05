@@ -32,3 +32,6 @@ OctoJotter-*-phase2-*.apk
 
 # Release signing credentials (contains passwords) — never commit
 keystore.properties
+
+# Play Store bundles — build artifacts, never commit
+*.aab
