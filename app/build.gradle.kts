@@ -50,10 +50,29 @@ android {
     }
   }
 
+  // How this build is distributed. It decides one thing: whether the app is
+  // allowed to update itself.
+  //
+  // Play's Device and Network Abuse policy forbids an app shipped through Play
+  // from installing an APK itself, so the `play` flavour carries neither the
+  // updater UI nor REQUEST_INSTALL_PACKAGES (declared in src/github/AndroidManifest.xml).
+  flavorDimensions += "distribution"
+  productFlavors {
+    create("github") {
+      dimension = "distribution"
+      buildConfigField("boolean", "SELF_UPDATE_ENABLED", "true")
+    }
+    create("play") {
+      dimension = "distribution"
+      buildConfigField("boolean", "SELF_UPDATE_ENABLED", "false")
+    }
+  }
+
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false
+      isMinifyEnabled = true
+      isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -78,6 +97,12 @@ android {
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+}
+
+// Room writes the schema JSON for every version here. Checked in, so a future
+// schema bump can be diffed and migration-tested instead of trusted.
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 kotlin {

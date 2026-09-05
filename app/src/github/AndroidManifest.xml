@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- GitHub-distributed builds only.
+
+         Octo Jotter ships release APKs on GitHub, where there is no store to
+         deliver updates, so this build downloads the new APK and hands it to
+         the system installer. Play forbids that for apps it distributes, so the
+         permission lives here rather than in the main manifest and never
+         reaches the `play` flavour. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+</manifest>

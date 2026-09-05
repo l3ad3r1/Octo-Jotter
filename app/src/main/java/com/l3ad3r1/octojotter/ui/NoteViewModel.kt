@@ -567,6 +567,14 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun launchInstaller(file: java.io.File) {
+        // Belt and braces: the Play flavour has no updater UI and no
+        // REQUEST_INSTALL_PACKAGES, so this must never run there even if some
+        // future caller reaches it.
+        if (!com.l3ad3r1.octojotter.BuildConfig.SELF_UPDATE_ENABLED) {
+            android.util.Log.w(logTag, "Self-update is disabled in this build")
+            _downloadStatus.value = DownloadStatus.Failed("Update via the Play Store")
+            return
+        }
         val context = getApplication<Application>()
         try {
             val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -674,7 +682,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         get() = ModelCatalog.EMBEDDING.let { e ->
             val bytes = (e.model.sizeBytes ?: 0L) + (e.vocab.sizeBytes ?: 0L)
             val mb = bytes / (1024.0 * 1024.0)
-            if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+            if (mb >= 1024) String.format(java.util.Locale.US, "%.1f GB", mb / 1024.0)
+            else String.format(java.util.Locale.US, "%.0f MB", mb)
         }
 
     private fun refreshEmbeddingModelReady() {

@@ -85,9 +85,20 @@ GEMINI_API_KEY=your_key_here
 ### 3. Run
 
 ```bash
-./gradlew installDebug      # build + install a debug build on a connected device
+./gradlew installGithubDebug   # build + install a debug build on a connected device
 # or open the project in Android Studio and press Run
 ```
+
+The app builds in two distribution flavours. They differ in one thing: whether
+the app may update itself.
+
+| Flavour | Self-update | Use |
+|---------|-------------|-----|
+| `github` | yes — downloads the release APK and opens the installer | GitHub release builds |
+| `play`   | no — no updater UI, no `REQUEST_INSTALL_PACKAGES` | Play Store submissions |
+
+Play's Device and Network Abuse policy forbids an app it distributes from
+installing an APK itself, so a Play upload **must** use the `play` flavour.
 
 On first launch, open **Settings → GitHub** and paste a **Personal Access Token**
 with the `gist` scope to enable sync. Create one at
@@ -99,13 +110,14 @@ The release build type is signed with an upload keystore supplied via environmen
 variables (never commit your keystore):
 
 ```bash
-export KEYSTORE_PATH=/absolute/path/to/my-upload-key.jks
-export STORE_PASSWORD=********
-export KEY_PASSWORD=********
-./gradlew assembleRelease
+./gradlew assembleGithubRelease   # GitHub release APK (self-updating)
+./gradlew bundlePlayRelease       # Play Store bundle (no self-update)
 ```
 
-The signed APK is written to `app/build/outputs/apk/release/app-release.apk`.
+Outputs land in `app/build/outputs/apk/github/release/` and
+`app/build/outputs/bundle/playRelease/` respectively. Release builds run R8
+(shrinking, resource shrinking and obfuscation); keep `proguard-rules.pro` in
+mind when adding a library that resolves anything reflectively.
 
 To generate an upload keystore:
 
@@ -206,5 +218,8 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 
 ## License
 
-No license has been specified yet. Until one is added, all rights are reserved by
-the author.
+[MIT](LICENSE). Contributions — including community plugins — are accepted under
+the same terms.
+
+Bundled third-party code keeps its own licence: `ondevice-llm` vendors
+[llama.cpp](https://github.com/ggerganov/llama.cpp) (MIT).

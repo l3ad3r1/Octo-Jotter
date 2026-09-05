@@ -1,5 +1,7 @@
 package com.l3ad3r1.octojotter.ai.model
 
+import java.util.Locale
+
 /**
  * One downloadable file (a model or a tokenizer vocab).
  *
@@ -18,7 +20,8 @@ data class DownloadableFile(
         get() {
             val bytes = sizeBytes ?: return "unknown size"
             val mb = bytes / (1024.0 * 1024.0)
-            return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+            return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024.0)
+            else String.format(Locale.US, "%.0f MB", mb)
         }
 }
 
@@ -44,7 +47,8 @@ data class EmbeddingModel(
         get() {
             val bytes = totalBytes ?: return "unknown size"
             val mb = bytes / (1024.0 * 1024.0)
-            return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+            return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024.0)
+            else String.format(Locale.US, "%.0f MB", mb)
         }
 }
 
