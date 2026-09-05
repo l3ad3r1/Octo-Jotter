@@ -1,0 +1,197 @@
+{
+  "id": "bullet-journal",
+  "name": "Bullet Journal Keys",
+  "version": "1.0.0",
+  "minAppVersion": "1.7",
+  "author": "l3ad3r1",
+  "description": "Rapid-log bullet journal key: task/event/appointment/note bullets, completed/migrated/cancelled status marks, signifiers, weather log, and a daily-log template.",
+  "type": "snippet",
+  "permissions": [],
+  "snippets": [
+    {
+      "id": "key",
+      "name": "📖 Key (reference)",
+      "content": "## Key\n\n**Bullets**\n□ Task    ○ Event    △ Appointment    • Note\n\n**Status** — mark over the bullet as it changes\nCompleted:  ☑ Task   ✓ ○ Event   ✓ △ Appointment\nMigrated:   → □ Task   → ○ Event   → △ Appointment\nCancelled:  ~~□~~ Task   ~~○~~ Event   ~~△~~ Appointment\n\n**Signifiers**\nⓁ Deadline   ! Important   ? Not sure   ♡ Inspiration   💡 Idea\n\n**Trackers**\n💓 Workout   #social-media Social media   🎂 Birthday\n\n**Weather**\n☀️ Sunny   🌤️ Partly sunny   🌫️ Mist   ☁️ Cloudy   🌦️ Drizzle   🌨️ Sleet   🌨️ Hail\n🌦️ Sunny, light rain   ⛅🌧️ Sunny, heavy rain\n🌧️ Light rain   🌧️🌧️ Heavy rain\n❄️ Light snow   ❄️❄️ Heavy snow\n⛈️ Thunder\n"
+    },
+    {
+      "id": "task",
+      "name": "□ Task",
+      "content": "□ "
+    },
+    {
+      "id": "event",
+      "name": "○ Event",
+      "content": "○ "
+    },
+    {
+      "id": "appointment",
+      "name": "△ Appointment",
+      "content": "△ "
+    },
+    {
+      "id": "note",
+      "name": "• Note",
+      "content": "• "
+    },
+    {
+      "id": "deadline",
+      "name": "Ⓛ Deadline",
+      "content": "Ⓛ "
+    },
+    {
+      "id": "important",
+      "name": "! Important",
+      "content": "! "
+    },
+    {
+      "id": "not-sure",
+      "name": "? Not sure",
+      "content": "? "
+    },
+    {
+      "id": "inspiration",
+      "name": "♡ Inspiration",
+      "content": "♡ "
+    },
+    {
+      "id": "idea",
+      "name": "💡 Idea",
+      "content": "💡 "
+    },
+    {
+      "id": "task-done",
+      "name": "☑ Task · Completed",
+      "content": "☑ "
+    },
+    {
+      "id": "event-done",
+      "name": "✓ Event · Completed",
+      "content": "✓ ○ "
+    },
+    {
+      "id": "appointment-done",
+      "name": "✓ Appointment · Completed",
+      "content": "✓ △ "
+    },
+    {
+      "id": "task-migrated",
+      "name": "→ Task · Migrated",
+      "content": "→ □ "
+    },
+    {
+      "id": "event-migrated",
+      "name": "→ Event · Migrated",
+      "content": "→ ○ "
+    },
+    {
+      "id": "appointment-migrated",
+      "name": "→ Appointment · Rescheduled",
+      "content": "→ △ "
+    },
+    {
+      "id": "task-cancelled",
+      "name": "~~□~~ Task · Cancelled",
+      "content": "~~□~~ "
+    },
+    {
+      "id": "event-cancelled",
+      "name": "~~○~~ Event · Cancelled",
+      "content": "~~○~~ "
+    },
+    {
+      "id": "appointment-cancelled",
+      "name": "~~△~~ Appointment · Cancelled",
+      "content": "~~△~~ "
+    },
+    {
+      "id": "workout",
+      "name": "💓 Workout",
+      "content": "💓 Workout — #workout\n"
+    },
+    {
+      "id": "social-media",
+      "name": "# Social media",
+      "content": "#social-media "
+    },
+    {
+      "id": "birthday",
+      "name": "🎂 Birthday",
+      "content": "🎂 Birthday — "
+    },
+    {
+      "id": "weather-sunny",
+      "name": "☀️ Weather · Sunny",
+      "content": "☀️ Sunny"
+    },
+    {
+      "id": "weather-partly-sunny",
+      "name": "🌤️ Weather · Partly sunny",
+      "content": "🌤️ Partly sunny"
+    },
+    {
+      "id": "weather-mist",
+      "name": "🌫️ Weather · Mist",
+      "content": "🌫️ Mist"
+    },
+    {
+      "id": "weather-cloudy",
+      "name": "☁️ Weather · Cloudy",
+      "content": "☁️ Cloudy"
+    },
+    {
+      "id": "weather-drizzle",
+      "name": "🌦️ Weather · Drizzle",
+      "content": "🌦️ Drizzle"
+    },
+    {
+      "id": "weather-sleet",
+      "name": "🌨️ Weather · Sleet",
+      "content": "🌨️ Sleet"
+    },
+    {
+      "id": "weather-hail",
+      "name": "🌨️ Weather · Hail",
+      "content": "🌨️ Hail"
+    },
+    {
+      "id": "weather-sunny-light-rain",
+      "name": "🌦️ Weather · Sunny, light rain",
+      "content": "🌦️ Sunny, light rain"
+    },
+    {
+      "id": "weather-sunny-heavy-rain",
+      "name": "⛅🌧️ Weather · Sunny, heavy rain",
+      "content": "⛅🌧️ Sunny, heavy rain"
+    },
+    {
+      "id": "weather-light-rain",
+      "name": "🌧️ Weather · Light rain",
+      "content": "🌧️ Light rain"
+    },
+    {
+      "id": "weather-heavy-rain",
+      "name": "🌧️🌧️ Weather · Heavy rain",
+      "content": "🌧️🌧️ Heavy rain"
+    },
+    {
+      "id": "weather-light-snow",
+      "name": "❄️ Weather · Light snow",
+      "content": "❄️ Light snow"
+    },
+    {
+      "id": "weather-heavy-snow",
+      "name": "❄️❄️ Weather · Heavy snow",
+      "content": "❄️❄️ Heavy snow"
+    },
+    {
+      "id": "weather-thunder",
+      "name": "⛈️ Weather · Thunder",
+      "content": "⛈️ Thunder"
+    },
+    {
+      "id": "daily-log",
+      "name": "📅 Daily Log Template",
+      "content": "# YYYY-MM-DD\n\n☀️ Weather: \n\n□ \n○ \n△ \n• \n\n💓 #workout \n#social-media \n"
+    }
+  ]
+}

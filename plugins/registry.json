@@ -136,6 +136,15 @@
       "version": "1.0.0",
       "permissions": ["notes:read"],
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/task-dashboard/manifest.json"
+    },
+    {
+      "id": "bullet-journal",
+      "name": "Bullet Journal Keys",
+      "author": "l3ad3r1",
+      "description": "Rapid-log bullet journal key: task/event/appointment/note bullets, completed/migrated/cancelled status marks, signifiers, weather log, and a daily-log template.",
+      "type": "snippet",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/bullet-journal/manifest.json"
     }
   ]
 }
