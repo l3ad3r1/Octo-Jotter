@@ -45,6 +45,7 @@ The plugins currently in this registry — browse their manifests for reference.
 |--------|-------------|
 | [Markdown Snippets](md-snippets/manifest.json) | Callout, table, code block, task list, front-matter templates. |
 | [Second Brain Templates](second-brain/manifest.json) | Daily note, weekly review, project, meeting, retro, bug, code, learning, ADR, inbox. |
+| [Bullet Journal Keys](bullet-journal/manifest.json) | Rapid-log key: task/event/appointment/note bullets, completed/migrated/cancelled marks, signifiers, weather log, daily-log template. |
 
 > Building a knowledge vault? See the [Second Brain guide](../docs/SECOND-BRAIN.md).
 
