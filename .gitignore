@@ -29,3 +29,6 @@ __pycache__/
 
 # local test APK artifacts (not distribution releases)
 OctoJotter-*-phase2-*.apk
+
+# Release signing credentials (contains passwords) — never commit
+keystore.properties

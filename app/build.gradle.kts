@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -25,11 +26,21 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      // Credentials come from keystore.properties (gitignored, repo root) so local
+      // release builds work without exporting anything. Environment variables still
+      // win when set, which is what CI uses.
+      val keystoreProps = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+      }
+      fun credential(env: String, property: String): String? =
+        System.getenv(env) ?: keystoreProps.getProperty(property)
+
+      val keystorePath = credential("KEYSTORE_PATH", "storeFile") ?: "my-upload-key.jks"
+      storeFile = rootProject.file(keystorePath)
+      storePassword = credential("STORE_PASSWORD", "storePassword")
+      keyAlias = credential("KEY_ALIAS", "keyAlias") ?: "upload"
+      keyPassword = credential("KEY_PASSWORD", "keyPassword")
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")

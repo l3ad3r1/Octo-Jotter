@@ -166,6 +166,44 @@ To restyle the icon, replace `assets/icon-source.png` with new artwork (same
 mockup shape: white background, octopus line art) and re-run the script; don't
 hand-edit anything under `res/mipmap-*/ic_launcher*.png`.
 
+## Release signing
+
+**The upload key is `my-upload-key.jks` in the repo root** (gitignored, along with
+every `*.jks`). Its credentials live in **`keystore.properties`** in the repo root —
+also gitignored, and the first place to look if a build asks for a password:
+
+```properties
+storeFile=my-upload-key.jks
+storePassword=…
+keyAlias=upload
+keyPassword=…
+```
+
+`app/build.gradle.kts` reads that file automatically, so `./gradlew assembleRelease`
+works with no environment setup. `KEYSTORE_PATH` / `STORE_PASSWORD` / `KEY_PASSWORD` /
+`KEY_ALIAS` environment variables still override it, which is what CI uses.
+
+Verify you have the right key before publishing — this fingerprint is the app's
+identity on Play, and signing an update with anything else makes it un-installable
+over an existing install:
+
+```bash
+keytool -list -v -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" | grep SHA256
+# SHA256: 64:0A:69:CE:99:81:45:31:9C:C5:09:4D:A9:36:67:FC:80:4A:19:D7:90:9F:80:EB:0A:83:57:41:01:F1:7C:5F
+```
+
+```bash
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+```
+
+> ⚠️ **`new-upload-key.jks` (repo root) is NOT the upload key.** It's a stray key whose
+> password is lost; it signed `OctoJotter-v2.6.apk` only (cert `33b83ca0…`). Everything
+> from v2.7 on uses `my-upload-key.jks` (`640a69ce…`). Don't delete either file, but
+> never sign with the stray one.
+>
+> ⚠️ Keys and passwords never go in this file or any other committed file — **this
+> repository is public.**
+
 ## License
 
 No license has been specified yet. Until one is added, all rights are reserved by
