@@ -152,18 +152,19 @@ app/src/main/java/com/l3ad3r1/octojotter/
 
 ## The app icon
 
-The launcher icon is generated, not drawn. `tools/generate_icon.py` defines the
-octopus mark as a set of parametric curves — a superellipse mantle and eight
-arms whose centre lines are `r(s) = R0 + (R1 - R0)s` with a cubic-eased angular
-hook `phi(s) = PHI * s^3` — and emits the adaptive foreground vector plus every
-raster density:
+The launcher icon is imported, not drawn by hand each time. `assets/icon-source.png`
+is the source artwork (a mockup with a white background and a reference border);
+`tools/generate_icon.py` isolates the line art from that border, keys white to
+transparent, and emits the adaptive foreground + monochrome layers plus every
+legacy/splash/store raster density from the result:
 
 ```bash
-python tools/generate_icon.py     # requires Pillow
+python tools/generate_icon.py     # requires Pillow, numpy, scipy
 ```
 
-To restyle the icon, change the constants at the top of that script and re-run
-it; don't hand-edit `res/drawable/ic_launcher_foreground.xml`.
+To restyle the icon, replace `assets/icon-source.png` with new artwork (same
+mockup shape: white background, octopus line art) and re-run the script; don't
+hand-edit anything under `res/mipmap-*/ic_launcher*.png`.
 
 ## License
 
