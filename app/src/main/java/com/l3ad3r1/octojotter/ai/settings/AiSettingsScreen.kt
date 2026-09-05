@@ -1,7 +1,5 @@
 package com.l3ad3r1.octojotter.ai.settings
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +20,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -48,13 +45,9 @@ fun AiSettingsScreen(
     val selectedId by viewModel.selectedChatModelId.collectAsStateWithLifecycle()
     val refreshTick by viewModel.refresh.collectAsStateWithLifecycle()
 
-    // Re-read on-disk presence whenever the tick changes (returning from a grant,
-    // finishing a download). Touch the value so recomposition depends on it.
+    // Re-read on-disk presence whenever the tick changes (finishing a download).
+    // Touch the value so recomposition depends on it.
     @Suppress("UNUSED_EXPRESSION") refreshTick
-
-    val grantLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { viewModel.refresh() }
 
     Scaffold(
         topBar = {
@@ -90,25 +83,10 @@ fun AiSettingsScreen(
             SectionCard("Status") {
                 Text(viewModel.statusLine, style = MaterialTheme.typography.bodySmall)
                 Text(
-                    if (viewModel.usingSharedStorage())
-                        "Models are shared with Hermes (shared \"AI Models\" folder)."
-                    else "Models are stored privately to this app.",
+                    "Models are stored privately to this app.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-
-            if (!viewModel.hasSharedAccess()) {
-                SectionCard("Share models with Hermes") {
-                    Text(
-                        "Grant all-files access so Octo Jotter can reuse models already " +
-                            "downloaded by the Hermes app (and vice-versa) instead of downloading again.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedButton(onClick = { grantLauncher.launch(viewModel.grantStorageAccessIntent()) }) {
-                        Text("Grant access")
-                    }
-                }
             }
 
             SectionCard("Semantic search model") {
@@ -128,7 +106,7 @@ fun AiSettingsScreen(
 
             SectionCard("Chat model (LLM)") {
                 Text(
-                    "The model that answers in \"Ask your notes\". Downloads are one-time and shared with Hermes.",
+                    "The model that answers in \"Ask your notes\". Downloads are one-time.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -30,8 +30,8 @@ import java.io.File
  *
  * Wires the embedder, vector store, indexer and hybrid search from a Context.
  * The embedder is chosen dynamically: the real ONNX MiniLM model when its files
- * are present ([ModelManager.isEmbeddingReady]) — which includes a copy shared by
- * Hermes — otherwise the deterministic bag-of-words fallback. Because the choice
+ * are present ([ModelManager.isEmbeddingReady]) — otherwise the deterministic
+ * bag-of-words fallback. Because the choice
  * is re-evaluated per access, a download takes effect without an app restart.
  */
 class AiContainer private constructor(
@@ -43,7 +43,7 @@ class AiContainer private constructor(
     val modelManager: ModelManager = ModelManager(appContext)
     private val embeddingModel = ModelCatalog.EMBEDDING
 
-    /** Directory the embedding model + vocab live in (shared with Hermes when granted). */
+    /** Directory the embedding model + vocab live in (app-private). */
     val modelDir: File get() = modelManager.storage.embeddingDir(embeddingModel.id)
     private val modelFile: File get() = File(modelDir, embeddingModel.model.fileName)
     private val vocabFile: File get() = File(modelDir, embeddingModel.vocab.fileName)
@@ -97,10 +97,10 @@ class AiContainer private constructor(
         containerScope.launch { aiPrefs.selectedChatModelId.collect { selectedChatModelId = it } }
     }
 
-    /** The GGUF chat model the user selected (default: Llama 3.2 1B; shared with Hermes when present). */
+    /** The GGUF chat model the user selected (default: Llama 3.2 1B). */
     val chatModel: ChatModel get() = ModelCatalog.chatById(selectedChatModelId)
 
-    /** True when the chat GGUF is on disk (possibly downloaded by Hermes). */
+    /** True when the chat GGUF is on disk. */
     fun isChatModelReady(): Boolean = modelManager.isChatModelPresent(chatModel)
 
     /** The on-device inference engine. Created lazily — throws on non-arm64 when

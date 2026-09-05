@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 /**
  * Drives the on-device RAG chat screen (Phase 2). Retrieval + generation run
  * entirely on-device via [AiContainer.ragChat]; the chat GGUF is downloaded on
- * first use (or reused from Hermes).
+ * first use.
  */
 class AiChatViewModel(application: Application) : AndroidViewModel(application) {
 

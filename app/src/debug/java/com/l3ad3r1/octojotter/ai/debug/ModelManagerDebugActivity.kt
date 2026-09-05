@@ -26,14 +26,12 @@ import androidx.compose.ui.unit.dp
 import com.l3ad3r1.octojotter.ai.AiContainer
 import com.l3ad3r1.octojotter.ai.model.ModelCatalog
 import com.l3ad3r1.octojotter.ai.model.ModelManager
-import com.l3ad3r1.octojotter.ai.model.ModelStorage
 import kotlinx.coroutines.launch
 
 /**
- * DEBUG BUILDS ONLY. Exercises download-on-first-use and cross-app reuse:
- * shows whether the shared "AI Models" folder is accessible, whether the MiniLM
- * embedding bundle and each Hermes GGUF are already present, and lets you
- * download the embedding model with progress.
+ * DEBUG BUILDS ONLY. Exercises download-on-first-use: shows where models are
+ * stored, whether the MiniLM embedding bundle and each chat GGUF are already
+ * present, and lets you download the embedding model with progress.
  */
 class ModelManagerDebugActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,19 +66,13 @@ private fun ModelManagerDebugScreen(modifier: Modifier = Modifier) {
     ) {
         Text("Model Manager — debug", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Shared access (All-Files): ${storage.hasSharedAccess()}\n" +
-                "Using: ${if (storage.usingSharedStorage) "shared /AI Models (Hermes-compatible)" else "app-private fallback"}\n" +
+            "Storage: app-private (no permission required)\n" +
                 "Chat dir: ${storage.chatModelsDir().absolutePath}\n" +
                 "Embed dir: ${ai.modelDir.absolutePath}",
             style = MaterialTheme.typography.bodySmall,
         )
         Text("Status: $status", style = MaterialTheme.typography.bodySmall)
         progress?.let { Text("Progress: ${(it * 100).toInt()}%", style = MaterialTheme.typography.bodySmall) }
-
-        Button(onClick = {
-            runCatching { context.startActivity(ModelStorage.allFilesAccessIntent(context)) }
-                .onFailure { status = "cannot open settings: ${it.message}" }
-        }) { Text("Grant All-Files-Access (to share with Hermes)") }
 
         HorizontalDivider()
 
@@ -107,7 +99,7 @@ private fun ModelManagerDebugScreen(modifier: Modifier = Modifier) {
 
         HorizontalDivider()
 
-        Text("Chat models (GGUF) — shared with Hermes:", style = MaterialTheme.typography.bodySmall)
+        Text("Chat models (GGUF):", style = MaterialTheme.typography.bodySmall)
         ModelCatalog.CHAT_MODELS.forEach { m ->
             Text(
                 "• ${m.displayName} (${m.file.sizeLabel}) — present: ${manager.isChatModelPresent(m)}",

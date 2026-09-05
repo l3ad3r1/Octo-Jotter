@@ -12,8 +12,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
 
 /**
- * Downloads model files on first use and reuses any already present — including
- * files a sibling app (Hermes) downloaded into the shared `AI Models` folder.
+ * Downloads model files on first use and reuses any already present.
  *
  * Downloads are resumable (HTTP Range), streamed to a `.part` file that is
  * size-verified and only then renamed into place, so a crash mid-download never
@@ -51,7 +50,7 @@ class ModelManager(
         return isPresent(model.model, dir) && isPresent(model.vocab, dir)
     }
 
-    /** Is a chat GGUF present (possibly downloaded by Hermes)? */
+    /** Is a chat GGUF present? */
     fun isChatModelPresent(model: ChatModel): Boolean =
         isPresent(model.file, storage.chatModelsDir())
 
@@ -75,7 +74,7 @@ class ModelManager(
         return Result.Success(File(dir, model.model.fileName))
     }
 
-    /** Download a chat GGUF into the shared models dir (Hermes-compatible). */
+    /** Download a chat GGUF into the app's models dir. */
     suspend fun downloadChatModel(
         model: ChatModel,
         onProgress: (Progress) -> Unit = {},
