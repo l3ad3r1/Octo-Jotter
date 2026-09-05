@@ -70,6 +70,11 @@ android {
 
   buildTypes {
     release {
+      // Smoke-testing a minified build normally means uninstalling the debug
+      // build first, because the two are signed with different keys - which
+      // destroys the notes on that device. With -PsideBySide the release build
+      // gets its own applicationId and installs alongside instead.
+      if (project.hasProperty("sideBySide")) applicationIdSuffix = ".r8test"
       isCrunchPngs = false
       isMinifyEnabled = true
       isShrinkResources = true
