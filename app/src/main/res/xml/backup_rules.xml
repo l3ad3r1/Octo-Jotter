@@ -1,13 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for API <= 30 (fullBackupContent).
+
+  Notes and drafts SHOULD be backed up - getting your notes back on a new phone
+  is the point. The GitHub token must NOT be: it lives in
+  secure_gist_notes_prefs.xml, encrypted by an AES256-GCM key held in the
+  device's hardware keystore. That key is never backed up, so restoring the
+  ciphertext to another device produces a file nothing can decrypt - which used
+  to throw out of EncryptedSharedPreferences.create() during startup.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="secure_gist_notes_prefs.xml" />
 </full-backup-content>

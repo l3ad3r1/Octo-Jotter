@@ -431,8 +431,8 @@ class NoteRepository(
                 val title = entry.path.removeSuffix(".md").replace("/", "__")
 
                 val existing = noteDao.getNoteByRepoAndPath(repoPath, entry.path)
-                if (existing == null) {
-                    noteDao.insert(
+                when (decidePull(existing, decoded)) {
+                    PullDecision.Insert -> noteDao.insert(
                         NoteEntity(
                             title = title,
                             content = decoded,
@@ -444,11 +444,12 @@ class NoteRepository(
                             lastModifiedLocally = System.currentTimeMillis()
                         )
                     )
-                } else if (existing.needsSync && existing.content != decoded) {
-                    markConflict(existing, decoded, remoteSha = entry.sha)
-                } else if (!existing.needsSync) {
-                    noteDao.update(
-                        existing.copy(
+
+                    PullDecision.Conflict ->
+                        markConflict(existing!!, decoded, remoteSha = entry.sha)
+
+                    PullDecision.AcceptRemote -> noteDao.update(
+                        existing!!.copy(
                             title = title,
                             content = decoded,
                             sha = entry.sha,
@@ -460,6 +461,11 @@ class NoteRepository(
                             lastModifiedLocally = System.currentTimeMillis()
                         )
                     )
+
+                    // Locally edited, but the edit happens to match what the
+                    // remote already has. Leave needsSync set so the push side
+                    // clears it; touching the row here would discard the flag.
+                    PullDecision.Skip -> Unit
                 }
             }
             Result.success(Unit)
@@ -690,4 +696,34 @@ class NoteRepository(
             Result.failure(e)
         }
     }
+}
+
+/**
+ * What a repository pull should do with one remote file.
+ *
+ * Split out of [NoteRepository.pullFromRepository] so the decision can be
+ * tested without a database, a network, or a keystore. The branch order is
+ * load-bearing: a locally-edited note must be checked for conflict *before*
+ * the clean-note case, or a pull would silently overwrite unsynced work.
+ */
+internal sealed interface PullDecision {
+    /** No local row for this path yet — take the remote file as a new note. */
+    data object Insert : PullDecision
+
+    /** Edited on both sides. Keep both versions and let the user choose. */
+    data object Conflict : PullDecision
+
+    /** No local edits pending, so the remote copy is authoritative. */
+    data object AcceptRemote : PullDecision
+
+    /** Local edits pending, but identical to the remote. Nothing to do. */
+    data object Skip : PullDecision
+}
+
+/** Pure reconciliation rule for a single file. See [PullDecision]. */
+internal fun decidePull(existing: NoteEntity?, remoteContent: String): PullDecision = when {
+    existing == null -> PullDecision.Insert
+    existing.needsSync && existing.content != remoteContent -> PullDecision.Conflict
+    !existing.needsSync -> PullDecision.AcceptRemote
+    else -> PullDecision.Skip
 }

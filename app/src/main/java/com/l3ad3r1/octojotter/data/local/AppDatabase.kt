@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class, NoteEmbeddingEntity::class], version = 11, exportSchema = false)
+@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class, NoteEmbeddingEntity::class], version = 11, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
@@ -108,7 +108,19 @@ abstract class AppDatabase : RoomDatabase() {
                     "gist_notes_database"
                 )
                     .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    // Only the pre-v6 schemas may be dropped. They shipped before
+                    // schemas were exported, so there is nothing to write a real
+                    // migration against.
+                    //
+                    // Deliberately NOT a blanket fallbackToDestructiveMigration:
+                    // that quietly deleted every note whenever a migration was
+                    // missing, including one forgotten during a future schema
+                    // bump. Room now throws instead, which fails in development
+                    // rather than on someone's phone.
+                    .fallbackToDestructiveMigrationFrom(
+                        dropAllTables = true,
+                        1, 2, 3, 4, 5,
+                    )
                     .build()
                 INSTANCE = instance
                 instance
