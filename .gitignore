@@ -35,3 +35,8 @@ keystore.properties
 
 # Play Store bundles — build artifacts, never commit
 *.aab
+
+# Agent handbook: contains the release signing password and key locations in
+# full, deliberately, so an agent picking this repo up does not have to hunt
+# for them. This repo is PUBLIC — it must never be committed.
+CODEX.md
