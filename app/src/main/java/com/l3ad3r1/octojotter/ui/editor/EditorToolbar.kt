@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
@@ -28,6 +27,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FormatBold
@@ -99,6 +99,10 @@ fun EditorToolbar(
     onRedo: () -> Unit,
     pluginActions: List<PluginAction>,
     onPluginAction: (PluginAction) -> Unit,
+    // Scan Text (OCR) plugin — null (the default) when it's not installed, so
+    // the button simply doesn't exist rather than showing disabled.
+    onScanText: (() -> Unit)? = null,
+    scanBusy: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val activeInline = remember(value.text, value.selection) { activeInlineFormats(value) }
@@ -106,23 +110,31 @@ fun EditorToolbar(
 
     fun apply(transform: (TextFieldValue) -> TextFieldValue) = onValueChange(transform(value))
 
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        // The activity is edge-to-edge, so the bar has to clear the navigation
-        // bar itself — and ride above the keyboard once it opens. Union rather
-        // than chaining the two, or the insets double-count while typing.
+    // The activity is edge-to-edge, so the bar has to clear the navigation bar
+    // itself — and ride above the keyboard once it opens. Union rather than
+    // chaining the two, or the insets double-count while typing. That padding
+    // goes on the outer box; the visual bar floats inside it as its own docked,
+    // elevated pill rather than a strip flush with the screen edge — the M3
+    // Expressive "docked toolbar" pattern.
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        Column {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shape = RoundedCornerShape(28.dp),
+            shadowElevation = 6.dp,
+            tonalElevation = 3.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -200,6 +212,16 @@ fun EditorToolbar(
                     testTag = "add_drawing_button",
                     onClick = onDraw
                 )
+
+                if (onScanText != null) {
+                    ToolbarButton(
+                        icon = Icons.Default.DocumentScanner,
+                        label = "Scan text",
+                        enabled = !scanBusy,
+                        testTag = "scan_text_button",
+                        onClick = onScanText
+                    )
+                }
 
                 ToolbarButton(
                     icon = Icons.Default.TableChart,

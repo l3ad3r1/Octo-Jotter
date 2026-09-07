@@ -43,8 +43,18 @@ class AiContainer private constructor(
     val modelManager: ModelManager = ModelManager(appContext)
     private val embeddingModel = ModelCatalog.EMBEDDING
 
-    /** Directory the embedding model + vocab live in (app-private). */
-    val modelDir: File get() = modelManager.storage.embeddingDir(embeddingModel.id)
+    /**
+     * Directory the embedding model + vocab live in — the app-private folder,
+     * unless both files are actually sitting in the public "AI Models" folder
+     * instead (and All Files Access is granted), in which case that's the one
+     * that gets used. A plain stat check, no copying, so this stays cheap
+     * enough to read straight from a Composable.
+     */
+    val modelDir: File
+        get() = modelManager.storage.resolvedEmbeddingDir(
+            embeddingModel.id,
+            listOf(embeddingModel.model.fileName, embeddingModel.vocab.fileName),
+        )
     private val modelFile: File get() = File(modelDir, embeddingModel.model.fileName)
     private val vocabFile: File get() = File(modelDir, embeddingModel.vocab.fileName)
 
@@ -114,7 +124,7 @@ class AiContainer private constructor(
     fun ragChat(): RagChatEngine {
         val generator = LlamaTextGenerator(
             engine = inferenceEngine,
-            modelFile = { modelManager.storage.chatModelFile(chatModel.file.fileName).takeIf { it.exists() } },
+            modelFile = { modelManager.storage.resolvedChatModelFile(chatModel.file.fileName).takeIf { it.exists() } },
         )
         return RagChatEngine(
             embedder = embedder(),

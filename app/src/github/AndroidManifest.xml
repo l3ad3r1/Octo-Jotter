@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- GitHub-distributed builds only.
 
@@ -9,5 +10,16 @@
          permission lives here rather than in the main manifest and never
          reaches the `play` flavour. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Same reasoning: Play restricts MANAGE_EXTERNAL_STORAGE (All Files
+         Access) to a short list of qualifying use cases — "an AI model a
+         sibling app or a file manager already put in a public folder" isn't
+         one of them — so this stays out of the `play` flavour's manifest.
+         Lets the app detect a model placed outside its own private storage
+         instead of asking to download it again. Requires a user-facing grant
+         via Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, not a
+         plain runtime dialog — see AiSettingsScreen. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
 </manifest>

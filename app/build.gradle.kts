@@ -18,8 +18,8 @@ android {
     applicationId = "com.l3ad3r1.octojotter"
     minSdk = 24
     targetSdk = 36
-    versionCode = 18
-    versionName = "2.7"
+    versionCode = 19
+    versionName = "2.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -61,10 +61,17 @@ android {
     create("github") {
       dimension = "distribution"
       buildConfigField("boolean", "SELF_UPDATE_ENABLED", "true")
+      // Same reasoning as REQUEST_INSTALL_PACKAGES below: MANAGE_EXTERNAL_STORAGE
+      // (declared in src/github/AndroidManifest.xml) lets this flavour find an AI
+      // model a user placed in a public folder by hand. Play restricts that
+      // permission to a short list of qualifying use cases this isn't on, so it
+      // never reaches the `play` flavour, and this flag keeps its UI out too.
+      buildConfigField("boolean", "ALL_FILES_ACCESS_ENABLED", "true")
     }
     create("play") {
       dimension = "distribution"
       buildConfigField("boolean", "SELF_UPDATE_ENABLED", "false")
+      buildConfigField("boolean", "ALL_FILES_ACCESS_ENABLED", "false")
     }
   }
 
@@ -102,6 +109,14 @@ android {
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+
+  // Room's MigrationTestHelper resolves the exported schema through the app's
+  // asset loader, keyed by database class name and version, so the JSON has to
+  // be a real asset of the variant under test. Attaching schemas/ to the
+  // `debug` source set puts it in reach of DatabaseMigrationTest (which runs on
+  // Robolectric against githubDebug) while keeping it out of every release
+  // artifact.
+  sourceSets.getByName("debug") { assets.srcDir("$projectDir/schemas") }
 }
 
 // Room writes the schema JSON for every version here. Checked in, so a future
@@ -139,6 +154,18 @@ dependencies {
   implementation(platform(libs.firebase.bom))
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
+  // Forces a modern androidx.fragment resolution. Without this, biometric:1.1.0
+  // and Play Services both pull an ancient fragment:1.2.5 — older than the
+  // Activity Result API (added in fragment 1.3.0 / activity 1.2.0) — whose
+  // FragmentActivity.startActivityForResult rejects the modern
+  // ActivityResultRegistry's request codes as invalid, crashing every picker
+  // launch (image insert, markdown import, model import) with
+  // "Can only use lower 16 bits for requestCode".
+  implementation(libs.androidx.fragment.ktx)
+  // Scan Text (OCR) plugin: on-device text recognition, model bundled in the
+  // APK (not the Play Services Vision downloadable-model variant) so it keeps
+  // working offline, matching the app's other on-device-AI features.
+  implementation(libs.mlkit.text.recognition)
   // implementation(libs.androidx.camera.camera2)
   // implementation(libs.androidx.camera.core)
   // implementation(libs.androidx.camera.lifecycle)
@@ -149,6 +176,7 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
+  implementation(libs.androidx.compose.ui.text.google.fonts)
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.core.splashscreen)
   implementation(libs.androidx.biometric)
@@ -178,6 +206,10 @@ dependencies {
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
+  // Room's MigrationTestHelper: exercises each schema upgrade against the
+  // checked-in schema JSON, so a bad migration fails here instead of crashing
+  // every existing install on launch.
+  testImplementation(libs.androidx.room.testing)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)

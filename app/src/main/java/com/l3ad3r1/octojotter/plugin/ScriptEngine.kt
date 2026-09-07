@@ -1,9 +1,10 @@
 package com.l3ad3r1.octojotter.plugin
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import org.mozilla.javascript.BaseFunction
 import org.mozilla.javascript.Context
 import org.mozilla.javascript.ContextFactory
@@ -22,8 +23,11 @@ import org.mozilla.javascript.Undefined
  *  - A [Context.setClassShutter] denies access to every Java class, so plugins
  *    can't reach `java.*`, reflection, IO, or the network.
  *  - A *sealed safe* standard scope (no `Packages`, `getClass`, etc.).
- *  - An instruction budget via [ContextFactory.observeInstructionCount] aborts
+ *  - An accumulated instruction budget *and* a wall-clock deadline, both
+ *    enforced from [ContextFactory.observeInstructionCount], abort
  *    runaway/infinite-loop scripts.
+ *  - One dedicated engine thread, so a plugin that does stall stalls nothing
+ *    else.
  *
  * A plugin's only capability is the injected `octo` API — currently
  * `octo.registerCommand(id, name, fn)`, where `fn(text)` returns transformed
@@ -44,8 +48,22 @@ class ScriptEngine(private val host: PluginHost? = null) {
     private val plugins = LinkedHashMap<String, LoadedPlugin>()
     private val factory = SandboxContextFactory()
 
+    /**
+     * All script execution happens on one dedicated daemon thread rather than
+     * on [Dispatchers.Default].
+     *
+     * Two reasons. Rhino scopes are not safe to share across threads, and the
+     * `octo.notes.*` bridge has to block on a database read (it is called from
+     * synchronous Rhino code, which cannot suspend) — doing that on a shared
+     * pool thread starves every other Default-dispatched coroutine in the app.
+     * Here a misbehaving plugin can only stall itself.
+     */
+    private val engineDispatcher = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "octo-plugin-engine").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+
     /** Replace all loaded plugins with [specs]. */
-    suspend fun reload(specs: List<PluginSpec>) = withContext(Dispatchers.Default) {
+    suspend fun reload(specs: List<PluginSpec>) = withContext(engineDispatcher) {
         mutex.withLock {
             plugins.clear()
             for (spec in specs) {
@@ -55,6 +73,7 @@ class ScriptEngine(private val host: PluginHost? = null) {
                         val scope = cx.initSafeStandardObjects(null, true)
                         val loaded = LoadedPlugin(scope)
                         installApi(cx, scope, spec.id, spec.permissions, loaded)
+                        factory.beginRun(LOAD_TIMEOUT_MS)
                         cx.evaluateString(scope, spec.source, spec.id, 1, null)
                         plugins[spec.id] = loaded
                     } finally {
@@ -74,7 +93,7 @@ class ScriptEngine(private val host: PluginHost? = null) {
 
     /** Run a command's function against [input], returning the transformed text. */
     suspend fun run(pluginId: String, commandId: String, input: String): Result<String> =
-        withContext(Dispatchers.Default) {
+        withContext(engineDispatcher) {
             mutex.withLock {
                 val plugin = plugins[pluginId]
                     ?: return@withLock Result.failure(IllegalStateException("Plugin not loaded"))
@@ -83,6 +102,7 @@ class ScriptEngine(private val host: PluginHost? = null) {
                 try {
                     val cx = factory.enterContext()
                     try {
+                        factory.beginRun(RUN_TIMEOUT_MS)
                         val result = command.fn.call(cx, plugin.scope, plugin.scope, arrayOf<Any>(input))
                         Result.success(Context.toString(result))
                     } finally {
@@ -210,24 +230,53 @@ class ScriptEngine(private val host: PluginHost? = null) {
         return obj
     }
 
-    /** Denies Java-class access and enforces the per-run instruction budget. */
+    /** Denies Java-class access and enforces the per-run execution budget. */
     private class SandboxContextFactory : ContextFactory() {
+
+        // Only ever touched from the single engine thread (see engineDispatcher).
+        private var consumed = 0L
+        private var deadlineAt = Long.MAX_VALUE
+
+        /** Start a fresh budget. Call immediately before entering script code. */
+        fun beginRun(timeoutMs: Long) {
+            consumed = 0L
+            deadlineAt = System.currentTimeMillis() + timeoutMs
+        }
+
         override fun makeContext(): Context {
             val cx = super.makeContext()
             cx.optimizationLevel = -1
-            cx.instructionObserverThreshold = 10_000
+            cx.instructionObserverThreshold = OBSERVER_THRESHOLD
             cx.setClassShutter { false }
             return cx
         }
 
         override fun observeInstructionCount(cx: Context?, instructionCount: Int) {
-            if (instructionCount > INSTRUCTION_BUDGET) {
+            // Rhino resets its own counter to zero after every call into here,
+            // so `instructionCount` is the delta since the last observation and
+            // never rises much above OBSERVER_THRESHOLD. Comparing that delta
+            // against a multi-million budget could therefore never fire, and
+            // `while(true){}` in a plugin ran forever. Accumulate the deltas,
+            // and keep a wall-clock deadline as well so a script that blocks
+            // without executing instructions still gets stopped.
+            consumed += instructionCount
+            if (consumed > INSTRUCTION_BUDGET) {
                 throw Error("Plugin exceeded its instruction budget")
+            }
+            if (System.currentTimeMillis() > deadlineAt) {
+                throw Error("Plugin exceeded its time budget")
             }
         }
     }
 
     companion object {
-        private const val INSTRUCTION_BUDGET = 5_000_000
+        private const val INSTRUCTION_BUDGET = 5_000_000L
+        private const val OBSERVER_THRESHOLD = 10_000
+
+        /** Wall-clock ceiling for evaluating one plugin's top-level source. */
+        private const val LOAD_TIMEOUT_MS = 2_000L
+
+        /** Wall-clock ceiling for one `octo.registerCommand` callback. */
+        private const val RUN_TIMEOUT_MS = 2_000L
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 
 private val DarkColorScheme =
   darkColorScheme(
@@ -96,6 +97,10 @@ fun MyApplicationTheme(
   dynamicColor: Boolean = false,
   // Supplied by an enabled theme plugin; when non-null it wins over the built-ins.
   overrideColorScheme: ColorScheme? = null,
+  // Settings → Appearance → Font. Null font keeps the built-in serif/sans
+  // pairing untouched; 1f scale is exactly the sizes Type.kt specifies.
+  fontFamily: FontFamily? = null,
+  fontScale: Float = 1f,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -112,8 +117,13 @@ fun MyApplicationTheme(
     }
 
   val statusColors = if (darkTheme) DarkStatusColors else LightStatusColors
+  val typography = when {
+    fontFamily != null -> Typography.withAppFont(fontFamily, fontScale)
+    fontScale != 1f -> Typography.withScale(fontScale)
+    else -> Typography
+  }
 
   CompositionLocalProvider(LocalOctoStatusColors provides statusColors) {
-    MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+    MaterialTheme(colorScheme = colorScheme, typography = typography, content = content)
   }
 }

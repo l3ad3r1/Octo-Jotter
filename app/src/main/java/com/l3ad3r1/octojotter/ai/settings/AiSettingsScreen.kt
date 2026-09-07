@@ -1,5 +1,8 @@
 package com.l3ad3r1.octojotter.ai.settings
 
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,11 +29,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.l3ad3r1.octojotter.ai.model.ChatModel
@@ -48,6 +57,17 @@ fun AiSettingsScreen(
     // Re-read on-disk presence whenever the tick changes (finishing a download).
     // Touch the value so recomposition depends on it.
     @Suppress("UNUSED_EXPRESSION") refreshTick
+
+    // All Files Access is granted from system Settings, not an in-app dialog —
+    // re-check on return so "Grant access" flips to "Granted" without a manual refresh.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Scaffold(
         topBar = {
@@ -83,10 +103,14 @@ fun AiSettingsScreen(
             SectionCard("Status") {
                 Text(viewModel.statusLine, style = MaterialTheme.typography.bodySmall)
                 Text(
-                    "Models are stored privately to this app.",
+                    "Downloads go to this app's private storage — no permission needed.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            if (viewModel.allFilesAccessSupported) {
+                AllFilesAccessCard(hasAccess = viewModel.hasAllFilesAccess())
             }
 
             SectionCard("Semantic search model") {
@@ -173,7 +197,7 @@ private fun ModelAction(
             )
         }
         is AiSettingsViewModel.Download.Failed -> Column(horizontalAlignment = Alignment.End) {
-            Text("Failed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            Text(d.message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             TextButton(onClick = onDownload) { Text("Retry") }
         }
         else -> if (present) {
@@ -188,6 +212,55 @@ private fun ModelAction(
             }
         } else {
             TextButton(onClick = onDownload) { Text("Download") }
+        }
+    }
+}
+
+/**
+ * All Files Access is a heavy, redirect-flow permission (not a runtime
+ * dialog) — [Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION] drops
+ * the user into system Settings for this app, where they flip it on and come
+ * back. Granting it lets the app also find a model sitting in the public
+ * "AI Models" folder instead of only its own private one.
+ */
+@Composable
+private fun AllFilesAccessCard(hasAccess: Boolean) {
+    val context = LocalContext.current
+    SectionCard("Find models in shared storage") {
+        Text(
+            if (hasAccess) {
+                "Granted — models placed in the shared \"AI Models\" folder are detected too."
+            } else {
+                "Optional. Grant access to also detect a model placed by hand in the shared " +
+                    "\"AI Models\" folder, instead of only this app's own private one."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (hasAccess) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Granted",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text("  Granted", style = MaterialTheme.typography.labelMedium)
+            }
+        } else {
+            TextButton(onClick = {
+                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        "package:${context.packageName}".toUri(),
+                    )
+                } else {
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = "package:${context.packageName}".toUri()
+                    }
+                }
+                context.startActivity(intent)
+            }) { Text("Grant access") }
         }
     }
 }

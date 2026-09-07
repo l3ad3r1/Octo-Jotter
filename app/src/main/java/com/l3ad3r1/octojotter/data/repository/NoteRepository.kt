@@ -1,5 +1,6 @@
 package com.l3ad3r1.octojotter.data.repository
 
+import com.l3ad3r1.octojotter.data.markdown.Frontmatter
 import com.l3ad3r1.octojotter.data.local.NoteDao
 import com.l3ad3r1.octojotter.data.local.NoteEntity
 import com.l3ad3r1.octojotter.data.local.DraftEntity
@@ -18,6 +19,8 @@ import java.io.IOException
 import java.security.MessageDigest
 
 private const val MAX_REPO_PAGES = 20
+private const val GISTS_PER_PAGE = 100
+private const val MAX_GIST_PAGES = 20
 private const val CONFLICT_STATE = "CONFLICT"
 
 data class NoteRevision(
@@ -41,12 +44,11 @@ class NoteRepository(
     val conflictedNotes: Flow<List<NoteEntity>> = noteDao.getConflictedNotesFlow()
 
     fun searchNotes(query: String): Flow<List<NoteEntity>> {
-        return noteDao.searchNotesFlow("%$query%")
+        return noteDao.searchNotesFlow("%${escapeLike(query)}%")
     }
 
     fun getNotesFilteredAndSorted(query: String, sortBy: String): Flow<List<NoteEntity>> {
-        val searchPattern = "%$query%"
-        return noteDao.getNotesFilteredAndSorted(searchPattern, sortBy)
+        return noteDao.getNotesFilteredAndSorted("%${escapeLike(query)}%", sortBy)
     }
 
     fun getNoteByIdFlow(id: Int): Flow<NoteEntity?> {
@@ -68,44 +70,154 @@ class NoteRepository(
         scanAndExtractTags(note.id, note.content)
     }
 
+    /**
+     * Save only the title and body the editor owns, leaving every sync column
+     * (`gistId`, `sha`, `remoteFilename`, hashes, conflict state) to whatever
+     * the last sync wrote. See [NoteDao.updateNoteText] for why writing the
+     * editor's whole-row snapshot back was creating duplicate Gists.
+     */
+    suspend fun updateNoteText(id: Int, title: String, content: String) {
+        noteDao.updateNoteText(id, title, content, System.currentTimeMillis())
+        scanAndExtractTags(id, content)
+    }
+
+
     fun getNotesByTag(tagName: String): Flow<List<NoteEntity>> {
         return noteDao.getNotesByTag(tagName)
     }
 
     fun getBacklinks(targetTitle: String, currentNoteId: Int): Flow<List<NoteEntity>> {
-        return noteDao.getBacklinks(targetTitle, currentNoteId)
+        return noteDao.getBacklinks(escapeLike(targetTitle), currentNoteId)
     }
 
     suspend fun getNoteByTitle(title: String): NoteEntity? {
         return noteDao.getNoteByTitle(title)
     }
 
+    suspend fun setNoteColor(id: Int, color: String?) {
+        noteDao.setColor(id, color)
+    }
+
+    suspend fun setNoteReminder(id: Int, reminderAt: Long?) {
+        noteDao.setReminderAt(id, reminderAt)
+    }
+
+    suspend fun getDailyNoteByTitle(title: String): NoteEntity? {
+        return noteDao.getDailyNoteByTitle(title)
+    }
+
+    suspend fun getNotesWithReminders(): List<NoteEntity> {
+        return noteDao.getNotesWithReminders()
+    }
+
+    // Tags come from two places in a note: inline #hashtags anywhere in the body,
+    // and a `tags:` (or `tag:`) list in YAML frontmatter — the convention this
+    // app's own Second Brain templates use, and the one Obsidian vaults use in
+    // general. Missing the frontmatter half meant every PARA/Zettelkasten note
+    // synced in from a real vault had no tags in this table at all, so "Filter
+    // by tag" (and the Tags nav destination) had nothing to show.
     private suspend fun scanAndExtractTags(noteId: Int, content: String) {
-        val regex = Regex("(?<=\\s|^)#([a-zA-Z0-9_-]+)")
-        val tags = regex.findAll(content).map { it.groupValues[1] }.toList()
+        val inlineRegex = Regex("(?<=\\s|^)#([a-zA-Z0-9_-]+)")
+        val inlineTags = inlineRegex.findAll(content)
+            .map { it.groupValues[1] }
+            // Obsidian's own tag rule: a tag must contain at least one
+            // non-numeric character. Without this, "PR #21" or "issue #3" in
+            // a daily note reads as tag "21" or "3" — a reference, not a tag.
+            .filter { tag -> tag.any { ch -> !ch.isDigit() } }
+            .toList()
+        val frontmatterTags = Frontmatter.parse(content)?.tags().orEmpty()
+        val tags = (frontmatterTags + inlineTags).distinct()
         noteDao.updateTagsForNote(noteId, tags)
     }
 
-    suspend fun deleteNote(note: NoteEntity) {
-        noteDao.delete(note)
+    /**
+     * Re-run tag extraction over every note already in the database. Sync
+     * (both the per-repo pull and the individual-Gist pull) writes through
+     * [NoteDao] directly rather than [insertNote]/[updateNote], so every note
+     * that arrived before this fix — which, for a synced vault, is all of
+     * them — has an empty entry in the tags table no matter what its
+     * frontmatter says. Cheap enough to call unconditionally at startup:
+     * [NoteDao.updateTagsForNote] is a clean delete-and-reinsert, so running
+     * it again over unchanged notes is a no-op past the first launch.
+     */
+    suspend fun backfillTagsForAllNotes() {
+        noteDao.getAllNotes().forEach { note -> scanAndExtractTags(note.id, note.content) }
     }
 
     suspend fun moveNoteToTrash(note: NoteEntity) {
-        val hasRemote = !note.gistId.isNullOrEmpty() || (!note.repository.isNullOrEmpty() && !note.path.isNullOrEmpty())
-        noteDao.moveToTrash(
-            id = note.id,
-            deletedAt = System.currentTimeMillis(),
-            pendingRemoteDelete = hasRemote
-        )
+        // Local and reversible: the remote copy is untouched until the trash is
+        // emptied, so Restore never has to re-upload anything.
+        noteDao.moveToTrash(id = note.id, deletedAt = System.currentTimeMillis())
     }
 
     suspend fun restoreNoteFromTrash(note: NoteEntity) {
         noteDao.restoreFromTrash(note.id)
     }
 
-    suspend fun emptyTrash() {
-        noteDao.emptyTrash()
+    /**
+     * Permanently delete everything in the Trash, remote copies included.
+     *
+     * Returns how many notes are still waiting on GitHub — offline, or a failed
+     * request. Those rows deliberately stay in the Trash: dropping them locally
+     * while the Gist still existed is what used to make deleted notes reappear
+     * on the next pull. [processPendingRemoteDeletes] retries them on every
+     * sync and removes each row as soon as its remote copy is confirmed gone.
+     */
+    suspend fun emptyTrash(): Int {
+        noteDao.queueTrashForPurge()
+        processPendingRemoteDeletes()
+        noteDao.purgeDeletableTrash()
+        return noteDao.countPendingRemoteDeletes()
     }
+
+    /**
+     * Drain the "deleted, remote copy still out there" queue. Each note whose
+     * Gist or repository file is confirmed gone (deleted now, or already a 404)
+     * is hard-deleted locally. Failures are left queued for the next attempt.
+     */
+    suspend fun processPendingRemoteDeletes(): Result<Unit> {
+        val pending = noteDao.getNotesPendingRemoteDelete()
+        if (pending.isEmpty()) return Result.success(Unit)
+        var lastFailure: Throwable? = null
+        for (note in pending) {
+            deleteRemoteCopy(note)
+                .onSuccess { noteDao.deleteById(note.id) }
+                .onFailure { lastFailure = it }
+        }
+        return lastFailure?.let { Result.failure(it) } ?: Result.success(Unit)
+    }
+
+    /**
+     * Delete this note's remote copy — Gist or repository file — treating "no
+     * remote copy" and "already gone (404)" as success, since either way there
+     * is nothing left to resurrect the note on the next pull.
+     */
+    private suspend fun deleteRemoteCopy(note: NoteEntity): Result<Unit> =
+        when (decidePurge(note)) {
+            PurgeDecision.DropRow -> Result.success(Unit)
+
+            PurgeDecision.DeleteRepoFile -> deleteNoteFromRepository(note)
+
+            PurgeDecision.DeleteGist -> {
+                val token = tokenManager.getToken()
+                if (token == null) {
+                    Result.failure(IOException("No GitHub token saved."))
+                } else {
+                    try {
+                        val response = githubApiService.deleteGist("Bearer $token", note.gistId.orEmpty())
+                        if (response.isSuccessful || response.code() == 404) {
+                            Result.success(Unit)
+                        } else {
+                            Result.failure(
+                                IOException("Failed to delete Gist: ${response.code()} ${response.message()}")
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                }
+            }
+        }
 
     suspend fun setNoteLocked(note: NoteEntity, locked: Boolean) {
         noteDao.setLocked(note.id, locked)
@@ -146,6 +258,16 @@ class NoteRepository(
                 id = 0,
                 gistId = null,
                 sha = null,
+                // Clear the remote address as well as the identity. Keeping
+                // `path` meant the "remote copy" pushed straight back over the
+                // file it was supposed to sit beside; with it null the push
+                // derives a fresh path from the copy's own title.
+                path = null,
+                remoteFilename = null,
+                deletedAt = null,
+                pendingRemoteDelete = false,
+                remoteUpdatedAt = null,
+                lastSyncedContentHash = null,
                 title = "${note.title.ifBlank { "Untitled" }} (remote copy)",
                 content = remote,
                 needsSync = true,
@@ -178,36 +300,6 @@ class NoteRepository(
 
     suspend fun getAllDrafts(): List<DraftEntity> {
         return noteDao.getAllDrafts()
-    }
-
-    suspend fun deleteNoteAndGist(note: NoteEntity): Result<Unit> {
-        noteDao.delete(note)
-        // Repo-backed note: remove the file from its repository instead of a Gist.
-        if (!note.repository.isNullOrEmpty()) {
-            return deleteNoteFromRepository(note)
-        }
-        val gistId = note.gistId
-        if (!gistId.isNullOrEmpty()) {
-            val token = tokenManager.getToken()
-            if (token != null) {
-                val formattedToken = "Bearer $token"
-                return try {
-                    val response = githubApiService.deleteGist(formattedToken, gistId)
-                    if (response.isSuccessful || response.code() == 404) {
-                        Result.success(Unit)
-                    } else {
-                        Result.failure(IOException("Failed to delete Gist: ${response.code()} ${response.message()}"))
-                    }
-                } catch (e: Exception) {
-                    Result.failure(e)
-                }
-            }
-        }
-        return Result.success(Unit)
-    }
-
-    suspend fun deleteNoteById(id: Int) {
-        noteDao.deleteById(id)
     }
 
     suspend fun getNoteHistory(note: NoteEntity): Result<List<NoteRevision>> {
@@ -349,14 +441,11 @@ class NoteRepository(
         remoteModifiedAt: Long = System.currentTimeMillis(),
         remoteSha: String? = null
     ) {
-        noteDao.update(
-            note.copy(
-                sha = remoteSha ?: note.sha,
-                conflictState = CONFLICT_STATE,
-                conflictedRemoteContent = remoteContent,
-                conflictedRemoteModifiedAt = remoteModifiedAt,
-                needsSync = false
-            )
+        noteDao.markConflict(
+            id = note.id,
+            sha = remoteSha ?: note.sha,
+            remoteContent = remoteContent,
+            remoteModifiedAt = remoteModifiedAt
         )
     }
 
@@ -419,10 +508,33 @@ class NoteRepository(
                 return Result.failure(IOException("Failed to fetch repository tree ($code): $hint"))
             }
 
-            val entries = response.body()?.tree ?: emptyList()
+            val body = response.body()
+            // GitHub caps a tree response and sets `truncated`. Carrying on
+            // would look like a successful sync that had quietly dropped part
+            // of the vault — and, worse, the missing files look locally-deleted.
+            if (body?.truncated == true) {
+                return Result.failure(
+                    IOException("This repository is too large for a single sync (GitHub truncated the file list). Split the vault across repositories.")
+                )
+            }
+            val entries = body?.tree ?: emptyList()
             val mdEntries = entries.filter { it.type == "blob" && it.path.endsWith(".md", ignoreCase = true) }
 
             for (entry in mdEntries) {
+                val existing = noteDao.getNoteByRepoAndPath(repoPath, entry.path)
+
+                // A trashed note stays trashed; re-syncing it would put content
+                // back into a note the user has already thrown away.
+                if (existing?.deletedAt != null) continue
+
+                // The blob sha *is* the content hash, so an unchanged file with
+                // no local edits needs no download at all. This is what keeps a
+                // few-hundred-note vault from spending a few-hundred API calls
+                // on every sync.
+                if (existing != null && !existing.needsSync &&
+                    existing.conflictState == null && existing.sha == entry.sha
+                ) continue
+
                 val blobResponse = githubApiService.getGitBlob(formattedToken, owner, repo, entry.sha)
                 if (!blobResponse.isSuccessful) continue
                 val encoded = blobResponse.body()?.content ?: continue
@@ -430,37 +542,45 @@ class NoteRepository(
                 // Title mirrors the app's PARA folder convention (path "/" -> "__").
                 val title = entry.path.removeSuffix(".md").replace("/", "__")
 
-                val existing = noteDao.getNoteByRepoAndPath(repoPath, entry.path)
                 when (decidePull(existing, decoded)) {
-                    PullDecision.Insert -> noteDao.insert(
-                        NoteEntity(
-                            title = title,
-                            content = decoded,
-                            repository = repoPath,
-                            path = entry.path,
-                            sha = entry.sha,
-                            needsSync = false,
-                            lastSyncedContentHash = hashContent(decoded),
-                            lastModifiedLocally = System.currentTimeMillis()
+                    // Sync writes through the DAO directly (it needs the exact
+                    // insert/update semantics above), so it has to re-run tag
+                    // extraction itself — insertNote()/updateNote() only cover
+                    // notes created or edited from inside the app.
+                    PullDecision.Insert -> {
+                        val newId = noteDao.insert(
+                            NoteEntity(
+                                title = title,
+                                content = decoded,
+                                repository = repoPath,
+                                path = entry.path,
+                                sha = entry.sha,
+                                needsSync = false,
+                                lastSyncedContentHash = hashContent(decoded),
+                                lastModifiedLocally = System.currentTimeMillis()
+                            )
                         )
-                    )
+                        scanAndExtractTags(newId.toInt(), decoded)
+                    }
 
                     PullDecision.Conflict ->
                         markConflict(existing!!, decoded, remoteSha = entry.sha)
 
-                    PullDecision.AcceptRemote -> noteDao.update(
-                        existing!!.copy(
+                    PullDecision.AcceptRemote -> {
+                        val applied = noteDao.applyRemoteContent(
+                            id = existing!!.id,
                             title = title,
                             content = decoded,
                             sha = entry.sha,
-                            needsSync = false,
-                            conflictState = null,
-                            conflictedRemoteContent = null,
-                            conflictedRemoteModifiedAt = null,
-                            lastSyncedContentHash = hashContent(decoded),
-                            lastModifiedLocally = System.currentTimeMillis()
+                            remoteFilename = existing.remoteFilename,
+                            remoteUpdatedAt = existing.remoteUpdatedAt,
+                            contentHash = hashContent(decoded),
+                            modifiedAt = System.currentTimeMillis(),
                         )
-                    )
+                        // 0 rows means the user started editing mid-pull; their
+                        // text wins and the next push sends it.
+                        if (applied > 0) scanAndExtractTags(existing.id, decoded)
+                    }
 
                     // Locally edited, but the edit happens to match what the
                     // remote already has. Leave needsSync set so the push side
@@ -516,16 +636,14 @@ class NoteRepository(
 
                 if (response.isSuccessful) {
                     val newSha = response.body()?.content?.sha
-                    noteDao.update(
-                        note.copy(
-                            path = rawPath,
-                            sha = newSha,
-                            needsSync = false,
-                            conflictState = null,
-                            conflictedRemoteContent = null,
-                            conflictedRemoteModifiedAt = null,
-                            lastSyncedContentHash = hashContent(note.content)
-                        )
+                    // Identity first and unconditionally — losing the new sha
+                    // would make the next push a blind write.
+                    noteDao.setRepoIdentity(note.id, rawPath, newSha)
+                    noteDao.markSynced(
+                        id = note.id,
+                        remoteUpdatedAt = note.remoteUpdatedAt,
+                        contentHash = hashContent(note.content),
+                        unchangedSince = note.lastModifiedLocally,
                     )
                 } else {
                     return Result.failure(IOException("Failed to upload ${note.title} (${response.code()})"))
@@ -537,7 +655,15 @@ class NoteRepository(
         }
     }
 
-    /** Delete a repo-backed note's file from GitHub (best-effort). */
+    /**
+     * Delete a repo-backed note's file from GitHub.
+     *
+     * Success here authorises a permanent local delete, so it must mean "there
+     * is definitely nothing left on GitHub" — not "we didn't manage to try".
+     * Reporting success on a missing token or an unparseable repo name would
+     * drop the row while the file was still in the repository, and the next
+     * pull would bring the note straight back.
+     */
     suspend fun deleteNoteFromRepository(note: NoteEntity): Result<Unit> {
         val repoPath = note.repository
         val path = note.path
@@ -545,9 +671,10 @@ class NoteRepository(
         if (repoPath.isNullOrEmpty() || path.isNullOrEmpty() || sha.isNullOrEmpty()) {
             return Result.success(Unit)  // never synced remotely; nothing to delete
         }
-        val token = tokenManager.getToken() ?: return Result.success(Unit)
+        val token = tokenManager.getToken()
+            ?: return Result.failure(IOException("No GitHub token saved."))
         val formattedToken = "Bearer $token"
-        val (owner, repo) = parseRepoPath(repoPath).getOrElse { return Result.success(Unit) }
+        val (owner, repo) = parseRepoPath(repoPath).getOrElse { return Result.failure(it) }
 
         return try {
             val response = githubApiService.deleteRepoFile(
@@ -569,56 +696,82 @@ class NoteRepository(
         val formattedToken = "Bearer $token"
 
         return try {
-            val response = githubApiService.getGists(formattedToken)
-            if (!response.isSuccessful) {
-                return Result.failure(IOException("GitHub API Error: ${response.code()} ${response.message()}"))
+            // Page through the whole list — everything past the first 100 Gists
+            // used to be invisible to the app.
+            val gists = mutableListOf<com.l3ad3r1.octojotter.data.remote.GistResponse>()
+            var page = 1
+            while (page <= MAX_GIST_PAGES) {
+                val response = githubApiService.getGists(formattedToken, perPage = GISTS_PER_PAGE, page = page)
+                if (!response.isSuccessful) {
+                    if (page == 1) {
+                        return Result.failure(IOException("GitHub API Error: ${response.code()} ${response.message()}"))
+                    }
+                    break  // partial results still beat none
+                }
+                val batch = response.body().orEmpty()
+                gists += batch
+                if (batch.size < GISTS_PER_PAGE) break
+                page++
             }
 
-            val gists = response.body() ?: emptyList()
             for (gist in gists) {
                 val mdFileEntry = gist.files?.values?.firstOrNull { file ->
                     file.filename?.endsWith(".md", ignoreCase = true) == true
-                }
+                } ?: continue
 
-                if (mdFileEntry != null) {
-                    val fullGistResponse = githubApiService.getGist(formattedToken, gist.id)
-                    if (fullGistResponse.isSuccessful) {
-                        val fullGist = fullGistResponse.body()
-                        val fullMdFile = fullGist?.files?.get(mdFileEntry.filename)
-                        val content = fullMdFile?.content ?: ""
-                        val title = mdFileEntry.filename?.removeSuffix(".md") ?: "Untitled"
+                val existingNote = noteDao.getNoteByGistId(gist.id)
 
-                        val existingNote = noteDao.getNoteByGistId(gist.id)
-                        if (existingNote == null) {
-                            noteDao.insert(
-                                NoteEntity(
-                                    gistId = gist.id,
-                                    title = title,
-                                    content = content,
-                                    remoteUpdatedAt = fullGist?.updatedAt ?: gist.updatedAt,
-                                    lastSyncedContentHash = hashContent(content),
-                                    lastModifiedLocally = System.currentTimeMillis(),
-                                    needsSync = false
-                                )
-                            )
-                        } else if (existingNote.needsSync && existingNote.content != content) {
-                            markConflict(existingNote, content)
-                        } else if (!existingNote.needsSync) {
-                            noteDao.update(
-                                existingNote.copy(
-                                    title = title,
-                                    content = content,
-                                    remoteUpdatedAt = fullGist?.updatedAt ?: gist.updatedAt,
-                                    lastSyncedContentHash = hashContent(content),
-                                    conflictState = null,
-                                    conflictedRemoteContent = null,
-                                    conflictedRemoteModifiedAt = null,
-                                    lastModifiedLocally = System.currentTimeMillis(),
-                                    needsSync = false
-                                )
-                            )
-                        }
-                    }
+                // Trashed stays trashed — don't pull content back into a note
+                // the user has thrown away (and don't spend a request on it).
+                if (existingNote?.deletedAt != null) continue
+
+                // The list endpoint already tells us when the Gist last
+                // changed, so an untouched Gist with no local edits needs no
+                // detail fetch. This turns a sync over N Gists from N+1
+                // requests into 1 in the common case.
+                if (existingNote != null && !existingNote.needsSync &&
+                    existingNote.conflictState == null &&
+                    existingNote.remoteUpdatedAt != null &&
+                    existingNote.remoteUpdatedAt == gist.updatedAt
+                ) continue
+
+                val fullGistResponse = githubApiService.getGist(formattedToken, gist.id)
+                if (!fullGistResponse.isSuccessful) continue
+                val fullGist = fullGistResponse.body()
+                val fullMdFile = fullGist?.files?.get(mdFileEntry.filename)
+                val content = fullMdFile?.content ?: ""
+                val remoteFilename = mdFileEntry.filename
+                val title = remoteFilename?.removeSuffix(".md") ?: "Untitled"
+                val remoteUpdatedAt = fullGist?.updatedAt ?: gist.updatedAt
+
+                if (existingNote == null) {
+                    val newId = noteDao.insert(
+                        NoteEntity(
+                            gistId = gist.id,
+                            title = title,
+                            content = content,
+                            remoteFilename = remoteFilename,
+                            remoteUpdatedAt = remoteUpdatedAt,
+                            lastSyncedContentHash = hashContent(content),
+                            lastModifiedLocally = System.currentTimeMillis(),
+                            needsSync = false
+                        )
+                    )
+                    scanAndExtractTags(newId.toInt(), content)
+                } else if (existingNote.needsSync && existingNote.content != content) {
+                    markConflict(existingNote, content)
+                } else if (!existingNote.needsSync) {
+                    val applied = noteDao.applyRemoteContent(
+                        id = existingNote.id,
+                        title = title,
+                        content = content,
+                        sha = existingNote.sha,
+                        remoteFilename = remoteFilename,
+                        remoteUpdatedAt = remoteUpdatedAt,
+                        contentHash = hashContent(content),
+                        modifiedAt = System.currentTimeMillis(),
+                    )
+                    if (applied > 0) scanAndExtractTags(existingNote.id, content)
                 }
             }
             Result.success(Unit)
@@ -635,56 +788,48 @@ class NoteRepository(
             val notesToSync = noteDao.getNotesToSync()
             for (note in notesToSync) {
                 if (note.conflictState == CONFLICT_STATE) continue
-                val filename = "${note.title.ifBlank { "Untitled" }}.md"
-                val fileRequest = GistFileRequest(content = note.content)
-                val filesMap = mapOf(filename to fileRequest)
-                val gistRequest = GistRequest(
+                val newFilename = "${note.title.ifBlank { "Untitled" }}.md"
+                val contentHash = hashContent(note.content)
+
+                // Creating a Gist: one file, named after the title.
+                val createRequest = GistRequest(
                     description = "Gist Note: ${note.title}",
                     public = false,
-                    files = filesMap
+                    files = mapOf(newFilename to GistFileRequest(content = note.content))
                 )
 
+                suspend fun storeCreated(created: com.l3ad3r1.octojotter.data.remote.GistResponse) {
+                    noteDao.setGistIdentity(note.id, created.id, newFilename)
+                    noteDao.markSynced(note.id, created.updatedAt, contentHash, note.lastModifiedLocally)
+                }
+
                 if (note.gistId.isNullOrEmpty()) {
-                    val response = githubApiService.createGist(formattedToken, gistRequest)
+                    val response = githubApiService.createGist(formattedToken, createRequest)
                     if (response.isSuccessful) {
-                        val createdGist = response.body()
-                        if (createdGist != null) {
-                            noteDao.update(
-                                note.copy(
-                                    gistId = createdGist.id,
-                                    needsSync = false,
-                                    remoteUpdatedAt = createdGist.updatedAt,
-                                    lastSyncedContentHash = hashContent(note.content)
-                                )
-                            )
-                        }
+                        response.body()?.let { storeCreated(it) }
                     } else {
                         return Result.failure(IOException("Failed to create Gist: ${response.code()} ${response.message()}"))
                     }
                 } else {
-                    val response = githubApiService.updateGist(formattedToken, note.gistId, gistRequest)
+                    val updateRequest = GistRequest(
+                        description = "Gist Note: ${note.title}",
+                        public = false,
+                        files = gistFilesForPush(note.remoteFilename, newFilename, note.content)
+                    )
+
+                    val response = githubApiService.updateGist(formattedToken, note.gistId, updateRequest)
                     if (response.isSuccessful) {
-                        noteDao.update(
-                            note.copy(
-                                needsSync = false,
-                                remoteUpdatedAt = response.body()?.updatedAt,
-                                lastSyncedContentHash = hashContent(note.content)
-                            )
-                        )
+                        noteDao.setGistIdentity(note.id, note.gistId, newFilename)
+                        noteDao.markSynced(note.id, response.body()?.updatedAt, contentHash, note.lastModifiedLocally)
                     } else if (response.code() == 404) {
-                        val responseCreate = githubApiService.createGist(formattedToken, gistRequest)
+                        // The Gist was deleted on GitHub — recreate it.
+                        val responseCreate = githubApiService.createGist(formattedToken, createRequest)
                         if (responseCreate.isSuccessful) {
-                            val createdGist = responseCreate.body()
-                            if (createdGist != null) {
-                                noteDao.update(
-                                    note.copy(
-                                        gistId = createdGist.id,
-                                        needsSync = false,
-                                        remoteUpdatedAt = createdGist.updatedAt,
-                                        lastSyncedContentHash = hashContent(note.content)
-                                    )
-                                )
-                            }
+                            responseCreate.body()?.let { storeCreated(it) }
+                        } else {
+                            return Result.failure(
+                                IOException("Failed to recreate Gist: ${responseCreate.code()} ${responseCreate.message()}")
+                            )
                         }
                     } else {
                         return Result.failure(IOException("Failed to update Gist: ${response.code()} ${response.message()}"))
@@ -695,6 +840,67 @@ class NoteRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+}
+
+/**
+ * What permanently deleting one trashed note requires.
+ *
+ * Split out of [NoteRepository.processPendingRemoteDeletes] for the same reason
+ * as [decidePull]: it is the decision that can lose — or resurrect — a note,
+ * and it should be testable without a network or a keystore. Only [DropRow]
+ * authorises deleting the local row outright; the other two must confirm the
+ * remote copy is gone first, because a row removed while its Gist or repo file
+ * still exists is re-created by the very next pull.
+ */
+internal sealed interface PurgeDecision {
+    /** Never synced anywhere. Nothing to delete remotely. */
+    data object DropRow : PurgeDecision
+
+    /** Backed by a Gist that has to go first. */
+    data object DeleteGist : PurgeDecision
+
+    /** Backed by a file in a GitHub repository that has to go first. */
+    data object DeleteRepoFile : PurgeDecision
+}
+
+/** Pure rule for permanently deleting one note. See [PurgeDecision]. */
+internal fun decidePurge(note: NoteEntity): PurgeDecision = when {
+    // Repository wins: a repo-backed note is addressed by path, not Gist id.
+    !note.repository.isNullOrEmpty() -> PurgeDecision.DeleteRepoFile
+    !note.gistId.isNullOrEmpty() -> PurgeDecision.DeleteGist
+    else -> PurgeDecision.DropRow
+}
+
+/**
+ * Escape the LIKE metacharacters so a query is matched literally. Pairs with
+ * the `ESCAPE '\'` clause on every LIKE in `NoteDao`; without it, searching for
+ * "TODO_2" also matched "TODO-2" and "TODOx2", and a wikilink target containing
+ * `_` linked back from every similarly-named note.
+ */
+internal fun escapeLike(raw: String): String =
+    raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+/**
+ * The `files` map for a Gist update.
+ *
+ * The Gist API renames a file only when the entry is keyed by its *current*
+ * remote filename and carries the new name in `filename`. Keying by the new
+ * name instead leaves the old file in place and adds a second one — after
+ * which a pull can pick the stale file and overwrite the note with its
+ * pre-rename title and text. [oldFilename] is null for a note that has never
+ * been pushed, where there is nothing to rename.
+ */
+internal fun gistFilesForPush(
+    oldFilename: String?,
+    newFilename: String,
+    content: String,
+): Map<String, GistFileRequest> {
+    val currentName = oldFilename ?: newFilename
+    return if (currentName == newFilename) {
+        mapOf(newFilename to GistFileRequest(content = content))
+    } else {
+        mapOf(currentName to GistFileRequest(content = content, filename = newFilename))
     }
 }
 

@@ -34,6 +34,12 @@ class AiSettingsViewModel(application: Application) : AndroidViewModel(applicati
     val embedding: EmbeddingModel = ModelCatalog.EMBEDDING
     val chatModels: List<ChatModel> = ModelCatalog.CHAT_MODELS
 
+    /** Whether this build can even ask for All Files Access (github flavour only). */
+    val allFilesAccessSupported: Boolean = com.l3ad3r1.octojotter.BuildConfig.ALL_FILES_ACCESS_ENABLED
+
+    /** True once the permission is actually granted — re-read on [refresh]. */
+    fun hasAllFilesAccess(): Boolean = manager.storage.hasAllFilesAccess()
+
     /** Progress/idle state per download target (key = "embedding" or a chat model id). */
     sealed interface Download {
         data object Idle : Download

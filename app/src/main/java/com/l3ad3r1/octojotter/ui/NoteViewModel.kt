@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -123,9 +124,19 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     val appUnlocked: StateFlow<Boolean> = _appUnlocked.asStateFlow()
 
     fun setAppLockEnabled(enabled: Boolean) {
+        // Marked unlocked *before* the preference is persisted, not after.
+        //
+        // Switching the lock on from Settings shouldn't slam the lock screen in
+        // the user's face — they are demonstrably already here; the lock engages
+        // when the app next goes to the background (see lockApp()). Doing this
+        // after the suspending DataStore write left a window where the
+        // `appLockEnabled` flow had already emitted true while `_appUnlocked`
+        // was still false, and the UI used that frame to fire the system
+        // credential prompt. Verified on-device: flipping the toggle popped the
+        // pattern screen immediately.
+        _appUnlocked.value = true
         viewModelScope.launch {
             appLockPreferences.setAppLockEnabled(enabled)
-            _appUnlocked.value = !enabled
         }
     }
 
@@ -148,6 +159,20 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
         }
+    }
+
+    val appFontId: StateFlow<String> = themePreferences.fontFamily
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.l3ad3r1.octojotter.data.local.ThemePreferences.DEFAULT_FONT_FAMILY)
+
+    fun setAppFont(id: String) {
+        viewModelScope.launch { themePreferences.setFontFamily(id) }
+    }
+
+    val appFontScale: StateFlow<Float> = themePreferences.fontScale
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.l3ad3r1.octojotter.data.local.ThemePreferences.DEFAULT_FONT_SCALE)
+
+    fun setAppFontScale(scale: Float) {
+        viewModelScope.launch { themePreferences.setFontScale(scale) }
     }
 
     // Editor typography preferences (driven by the toolbar's text-style menu)
@@ -234,7 +259,75 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         pluginRepository.installedPlugins
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _registryPlugins = MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>>(emptyList())
+    // Declared here (moved up from its original spot further down) because the
+    // init block below reads it immediately: Kotlin runs property initializers
+    // and init blocks in textual order, so a `by lazy` declared after an init
+    // block that touches it crashes with "Lazy.getValue() on a null object
+    // reference" — the delegate itself hasn't been assigned yet at that point
+    // in construction, lazy or not.
+    private val aiContainer by lazy { com.l3ad3r1.octojotter.ai.AiContainer.get(application) }
+
+    init {
+        // GitHub Sync and On-device AI are downloadable feature plugins — they
+        // start in Browse like any community theme, not pre-installed. The
+        // one exception is a device that was already using one before the
+        // plugin system existed to gate it (a saved token, a model already on
+        // disk): installing it once here keeps an upgrade from looking like
+        // sync or AI silently broke. See PluginRepository.migrateExistingUsageToInstalled.
+        viewModelScope.launch {
+            val githubInUse = !tokenManager.getToken().isNullOrBlank()
+            val aiInUse = aiContainer.modelManager.let { mm ->
+                mm.isEmbeddingReady() || ModelCatalog.CHAT_MODELS.any { mm.isChatModelPresent(it) }
+            }
+            pluginRepository.migrateExistingUsageToInstalled(githubInUse, aiInUse)
+        }
+    }
+
+    // Real toggleable entries in the same "Installed" list as a community
+    // theme — Settings sections and nav entry points only appear once
+    // installed and enabled. Disabling doesn't touch the underlying data (a
+    // saved token, a downloaded model), so re-enabling picks up right where
+    // it left off; fully removing it is just as reversible since neither
+    // action can delete code that ships in the APK.
+    val githubSyncEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.GITHUB_SYNC)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val onDeviceAiEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.ON_DEVICE_AI)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val dailyNotesEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.DAILY_NOTES)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val templatesEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.TEMPLATES)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val taskRemindersEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.TASK_REMINDERS)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val graphViewEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.GRAPH_VIEW)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val ocrScanEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.OCR_SCAN)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val commandPaletteEnabled: StateFlow<Boolean> =
+        pluginRepository.isFeatureEnabled(com.l3ad3r1.octojotter.plugin.FeaturePluginIds.COMMAND_PALETTE)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    // GitHub Sync and On-device AI are always in this list — they're local
+    // entries, not fetched, so they show up in Browse even offline or before
+    // the community registry has loaded. Both screens already filter out
+    // whatever's in installedPlugins by id, so one installed here just
+    // disappears from Browse the same way a community plugin would.
+    private val _registryPlugins =
+        MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>>(pluginRepository.builtinFeatureEntries())
     val registryPlugins: StateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>> = _registryPlugins.asStateFlow()
 
     private val _isLoadingPlugins = MutableStateFlow(false)
@@ -261,16 +354,21 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             val result = pluginRepository.fetchRegistry()
             _isLoadingPlugins.value = false
             result
-                .onSuccess { _registryPlugins.value = it }
+                .onSuccess { _registryPlugins.value = pluginRepository.builtinFeatureEntries() + it }
                 .onFailure { _pluginMessage.value = "Couldn't load plugins: ${it.message}" }
         }
     }
 
     fun installPlugin(entry: com.l3ad3r1.octojotter.plugin.RegistryEntry) {
         viewModelScope.launch {
-            pluginRepository.install(entry, currentVersionName)
-                .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
-                .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
+            if (entry.type == com.l3ad3r1.octojotter.plugin.PluginTypes.FEATURE) {
+                pluginRepository.installBuiltinFeature(entry.id)
+                _pluginMessage.value = "Installed ${entry.name}"
+            } else {
+                pluginRepository.install(entry, currentVersionName)
+                    .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
+                    .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
+            }
         }
     }
 
@@ -286,6 +384,136 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearPluginMessage() { _pluginMessage.value = null }
+
+    // ---- Deep link: open a specific note (Task Reminders notification tap) ----
+    private val _pendingOpenNoteId = MutableStateFlow<Int?>(null)
+    val pendingOpenNoteId: StateFlow<Int?> = _pendingOpenNoteId.asStateFlow()
+
+    fun requestOpenNote(noteId: Int) { _pendingOpenNoteId.value = noteId }
+    fun consumeOpenNoteRequest() { _pendingOpenNoteId.value = null }
+
+    // ---- Daily Notes (feature plugin) ----
+
+    /**
+     * Open today's note, creating it (marked [NoteEntity.isDailyNote]) the
+     * first time it's asked for on a given date. When the Templates plugin is
+     * enabled and a template named "Daily" exists, that seeds the content.
+     */
+    fun openOrCreateDailyNote(onReady: (Int) -> Unit) {
+        viewModelScope.launch {
+            val title = com.l3ad3r1.octojotter.data.TemplateEngine.todayTitle()
+            val existing = repository.getDailyNoteByTitle(title)
+            if (existing != null) {
+                onReady(existing.id)
+                return@launch
+            }
+            // One-shot read: templates are small and rarely change, not worth
+            // keeping a live collector open just for this.
+            val dailyTemplate = if (templatesEnabled.value) {
+                templateDao.getAllFlow().first().firstOrNull { it.name.equals("Daily", ignoreCase = true) }
+            } else null
+            val content = dailyTemplate?.let {
+                com.l3ad3r1.octojotter.data.TemplateEngine.render(it.content, title)
+            } ?: ""
+            val newNote = NoteEntity(
+                title = title,
+                content = content,
+                isDailyNote = true,
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = content.isNotEmpty()
+            )
+            val id = repository.insertNote(newNote).toInt()
+            onReady(id)
+        }
+    }
+
+    // ---- Templates (feature plugin) ----
+
+    private val templateDao = AppDatabase.getDatabase(application).templateDao()
+
+    val templates: StateFlow<List<com.l3ad3r1.octojotter.data.local.TemplateEntity>> =
+        templateDao.getAllFlow().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun saveTemplate(id: String?, name: String, content: String) {
+        viewModelScope.launch {
+            templateDao.upsert(
+                com.l3ad3r1.octojotter.data.local.TemplateEntity(
+                    id = id ?: java.util.UUID.randomUUID().toString(),
+                    name = name.ifBlank { "Untitled template" },
+                    content = content
+                )
+            )
+        }
+    }
+
+    fun deleteTemplate(id: String) {
+        viewModelScope.launch { templateDao.deleteById(id) }
+    }
+
+    /** Create a new note from [template], substituting its variables, and hand back its id. */
+    fun createNoteFromTemplate(
+        template: com.l3ad3r1.octojotter.data.local.TemplateEntity,
+        title: String,
+        onNoteCreated: (Int) -> Unit
+    ) {
+        viewModelScope.launch {
+            val defaultFolder = if (_selectedFolder.value == "Uncategorized") null else _selectedFolder.value
+            val resolvedTitle = title.ifBlank { com.l3ad3r1.octojotter.data.TemplateEngine.todayTitle() }
+            val content = com.l3ad3r1.octojotter.data.TemplateEngine.render(template.content, resolvedTitle)
+            val newNote = NoteEntity(
+                title = resolvedTitle,
+                content = content,
+                folder = defaultFolder,
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = true
+            )
+            val id = repository.insertNote(newNote).toInt()
+            onNoteCreated(id)
+        }
+    }
+
+    // ---- Color-coded notes (core) ----
+
+    fun setNoteColor(note: NoteEntity, color: String?) {
+        viewModelScope.launch {
+            repository.setNoteColor(note.id, color)
+            if (_editingNote.value?.id == note.id) {
+                _editingNote.value = _editingNote.value?.copy(color = color)
+            }
+        }
+    }
+
+    // ---- Task Reminders (feature plugin) ----
+
+    fun setNoteReminder(note: NoteEntity, reminderAt: Long?) {
+        viewModelScope.launch {
+            repository.setNoteReminder(note.id, reminderAt)
+            if (_editingNote.value?.id == note.id) {
+                _editingNote.value = _editingNote.value?.copy(reminderAt = reminderAt)
+            }
+            com.l3ad3r1.octojotter.reminders.ReminderScheduler.schedule(getApplication(), note.id, note.displayTitle, reminderAt)
+        }
+    }
+
+    // ---- Graph View (feature plugin) ----
+
+    /** All non-trashed notes' id/title/wikilinks, for the Graph View screen to lay out. */
+    suspend fun getGraphData(): List<com.l3ad3r1.octojotter.ui.graph.GraphNoteData> {
+        val notes = repository.getAllNotes().filter { it.deletedAt == null }
+        val wikilinkRegex = Regex("""\[\[([^\]|#]+)""")
+        return notes.map { note ->
+            val links = wikilinkRegex.findAll(note.content)
+                .map { it.groupValues[1].trim() }
+                .filter { it.isNotEmpty() && it != note.displayTitle }
+                .distinct()
+                .toList()
+            com.l3ad3r1.octojotter.ui.graph.GraphNoteData(
+                id = note.id,
+                title = note.displayTitle,
+                linkedTitles = links
+            )
+        }
+    }
 
     // ---- Script plugins (phase 2/4): sandboxed JS commands + gated APIs ----
     // Bridge the sandbox uses to affect the app; every capability is permission-gated
@@ -385,6 +613,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         _pluginCommands.asStateFlow()
 
     init {
+        // One-time (per launch) fixup: notes that arrived via sync never ran
+        // through tag extraction, so their frontmatter tags never made it into
+        // the filterable tags table. See NoteRepository.backfillTagsForAllNotes.
+        viewModelScope.launch { repository.backfillTagsForAllNotes() }
+
+        // Re-arm note reminders on launch. WorkManager survives a reboot on its
+        // own, but not "Force stop" or a restore onto a new device — and a
+        // reminder that silently never fires is worse than no reminder. Work is
+        // enqueued uniquely per note, so re-scheduling an already-pending one
+        // just replaces it.
+        viewModelScope.launch {
+            repository.getNotesWithReminders().forEach { note ->
+                val dueAt = note.reminderAt ?: return@forEach
+                if (dueAt <= System.currentTimeMillis()) return@forEach  // already past; don't re-fire
+                com.l3ad3r1.octojotter.reminders.ReminderScheduler.schedule(
+                    getApplication(), note.id, note.displayTitle, dueAt
+                )
+            }
+        }
+
         // Reload the sandbox whenever the set of enabled script plugins changes.
         viewModelScope.launch {
             pluginRepository.enabledScriptPlugins.collect { list ->
@@ -637,7 +885,8 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     val selectedTag: StateFlow<String?> = _selectedTag.asStateFlow()
 
     // --- On-device semantic search (docs/ON-DEVICE-AI.md) ---
-    private val aiContainer by lazy { AiContainer.get(application) }
+    // (aiContainer itself is declared up near the top of the class now — see
+    // the comment there for why.)
 
     /** Whether this device can run semantic search (arm64 + enough RAM). */
     val semanticSearchAvailable: Boolean by lazy { aiContainer.capability.supportsSemanticSearch }
@@ -927,6 +1176,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 repository = null,
                 path = null,
                 sha = null,
+                remoteFilename = null,
                 title = "${note.title.ifBlank { "Untitled" }} (copy)",
                 lastModifiedLocally = now,
                 needsSync = true,
@@ -1099,6 +1349,17 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private var autoSaveJob: Job? = null
     private var draftSaveJob: Job? = null
 
+    /**
+     * Keeps [_editingNote] in step with the database row while the editor is
+     * open. Without it the editor held a snapshot taken at open time, and every
+     * save wrote that whole snapshot back — reverting any `gistId`/`sha` a sync
+     * had assigned in the meantime and causing the next push to create a second
+     * Gist for the same note. Only metadata flows in here; the text fields are
+     * driven by [_editorTitle]/[_editorContent], so nothing moves under the
+     * user's cursor.
+     */
+    private var editingNoteWatchJob: Job? = null
+
     fun saveToken(token: String) {
         tokenManager.saveToken(token)
     }
@@ -1116,7 +1377,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 _editorTitle.value = note.title
                 _editorContent.value = note.content
                 _saveStatus.value = SaveStatus.Idle
-                
+
                 // Check if an unsaved draft exists for this note
                 val draft = repository.getDraftByNoteId(noteId)
                 if (draft != null && (draft.title != note.title || draft.content != note.content)) {
@@ -1124,6 +1385,14 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _pendingDraft.value = null
                 }
+            }
+        }
+        // Follow the row from here on, so sync metadata written by a background
+        // sync is visible to the editor instead of being overwritten by it.
+        editingNoteWatchJob?.cancel()
+        editingNoteWatchJob = viewModelScope.launch {
+            repository.getNoteByIdFlow(noteId).collect { fresh ->
+                if (fresh != null) _editingNote.value = fresh
             }
         }
     }
@@ -1150,23 +1419,18 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        // Main note database update (1.5s debounce)
+        // Main note database update (1.5s debounce). Writes only title/content
+        // — never the editor's stale copy of the sync columns; the watch job
+        // set up in loadNote() brings any change to those back the other way.
         autoSaveJob?.cancel()
         autoSaveJob = viewModelScope.launch {
             delay(1500) // 1.5s debounce
-            val updated = note.copy(
-                title = newTitle,
-                content = newContent,
-                lastModifiedLocally = System.currentTimeMillis(),
-                needsSync = true
-            )
-            repository.updateNote(updated)
-            _editingNote.value = updated
+            repository.updateNoteText(note.id, newTitle, newContent)
             _saveStatus.value = SaveStatus.Saved
-            
+
             // Delete draft since the main note is now fully saved
             repository.deleteDraftByNoteId(note.id)
-            
+
             // Trigger background WorkManager sync immediately
             triggerBackgroundSync()
         }
@@ -1182,14 +1446,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
         draftSaveJob?.cancel()
         _saveStatus.value = SaveStatus.Saving
         viewModelScope.launch {
-            val updated = note.copy(
-                title = _editorTitle.value,
-                content = _editorContent.value,
-                lastModifiedLocally = System.currentTimeMillis(),
-                needsSync = true
-            )
-            repository.updateNote(updated)
-            _editingNote.value = updated
+            repository.updateNoteText(note.id, _editorTitle.value, _editorContent.value)
             _saveStatus.value = SaveStatus.Saved
             repository.deleteDraftByNoteId(note.id)
             triggerBackgroundSync()
@@ -1247,6 +1504,29 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             val newNote = NoteEntity(
                 title = "",
                 content = "",
+                folder = defaultFolder,
+                lastModifiedLocally = System.currentTimeMillis(),
+                needsSync = false
+            )
+            val id = repository.insertNote(newNote).toInt()
+            onNoteCreated(id)
+        }
+    }
+
+    /**
+     * Create a new note pre-seeded with an open checklist line. There's no
+     * separate "task" entity — the Task Board just scans every unlocked
+     * note's content for `- [ ] ` lines (see [parseTaskBoardItems] in
+     * NoteApp.kt) — so "new task" is really "new note that starts life as
+     * one". The editor already places the caret at the end of the loaded
+     * body, so it lands right after the checkbox, ready to type.
+     */
+    fun createNewTask(onNoteCreated: (Int) -> Unit) {
+        viewModelScope.launch {
+            val defaultFolder = if (_selectedFolder.value == "Uncategorized") null else _selectedFolder.value
+            val newNote = NoteEntity(
+                title = "",
+                content = "- [ ] ",
                 folder = defaultFolder,
                 lastModifiedLocally = System.currentTimeMillis(),
                 needsSync = false
@@ -1333,8 +1613,18 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun emptyTrash() {
         viewModelScope.launch {
-            repository.emptyTrash()
-            _syncMessage.value = "Trash emptied."
+            // Notes whose Gist or repo file could not be deleted right now stay
+            // in the Trash on purpose — removing them locally while the remote
+            // copy still existed is what made deleted notes come back on the
+            // next pull. Say so rather than reporting a clean sweep.
+            val stillPending = repository.emptyTrash()
+            _syncMessage.value = if (stillPending == 0) {
+                "Trash emptied."
+            } else {
+                "Trash emptied. $stillPending note${if (stillPending == 1) "" else "s"} " +
+                    "still need deleting on GitHub — that finishes on the next sync."
+            }
+            if (stillPending > 0) triggerBackgroundSync()
         }
     }
 

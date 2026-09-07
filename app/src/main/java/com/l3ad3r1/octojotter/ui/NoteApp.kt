@@ -2,7 +2,9 @@ package com.l3ad3r1.octojotter.ui
 
 import android.app.Activity
 import android.content.Context
+import android.app.KeyguardManager
 import android.content.Intent
+import android.provider.Settings
 import com.l3ad3r1.octojotter.ai.chat.AiChatActivity
 import com.l3ad3r1.octojotter.ai.settings.AiSettingsScreen
 import android.graphics.Bitmap
@@ -29,6 +31,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,6 +55,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -63,6 +67,7 @@ import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
@@ -119,6 +124,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -155,7 +161,9 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -194,6 +202,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
@@ -210,11 +220,13 @@ import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.RestoreFromTrash
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.material.icons.filled.Lightbulb
@@ -226,6 +238,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Storage
 import com.l3ad3r1.octojotter.data.markdown.Frontmatter
 import com.l3ad3r1.octojotter.ui.editor.PropertiesCard
 import com.l3ad3r1.octojotter.ui.editor.PropertiesDialog
@@ -236,10 +249,12 @@ import com.l3ad3r1.octojotter.ui.editor.EditorToolbar
 import com.l3ad3r1.octojotter.ui.editor.PluginAction
 import com.l3ad3r1.octojotter.ui.editor.insertInline
 import com.l3ad3r1.octojotter.ui.theme.MonoFontFamily
+import com.l3ad3r1.octojotter.ui.theme.OctoShapes
 import com.l3ad3r1.octojotter.ui.theme.SansFontFamily
 import com.l3ad3r1.octojotter.ui.theme.OctoStatusColors
 import com.l3ad3r1.octojotter.ui.theme.LightStatusColors
 import com.l3ad3r1.octojotter.ui.theme.DarkStatusColors
+import com.l3ad3r1.octojotter.BuildConfig
 import com.l3ad3r1.octojotter.ui.theme.octoStatus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -248,16 +263,52 @@ import java.io.File
 
 @Composable
 fun NoteApp(viewModel: NoteViewModel) {
-    val navController = rememberNavController()
     val appLockEnabled by viewModel.appLockEnabled.collectAsState()
     val appUnlocked by viewModel.appUnlocked.collectAsState()
+    val locked = appLockEnabled && !appUnlocked
 
-    if (appLockEnabled && !appUnlocked) {
-        AppLockScreen(
-            onUnlock = { viewModel.markAppUnlocked() },
-            onDisableLock = { viewModel.setAppLockEnabled(false) }
-        )
-        return
+    // The lock is an opaque overlay, not an early return.
+    //
+    // Returning early unmounts the whole navigation tree, which discards every
+    // `remember` in it *and* unregisters the activity-result launchers held by
+    // the image picker, the Markdown importer and the OCR camera. Since the
+    // lock now re-arms whenever the app is backgrounded (MainActivity.onStop),
+    // an early return would drop the result of any picker the user had just
+    // launched — the camera would come back to a lock screen and throw the
+    // photo away. Composing underneath and covering it keeps that state alive.
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            // The overlay hides the notes visually and swallows every pointer
+            // event, but composing them underneath still leaves their titles and
+            // bodies in the accessibility tree — a screen reader would happily
+            // read out a "locked" app. Clearing the subtree's semantics closes
+            // that while keeping the composition (and its activity-result
+            // launchers) alive, which is the whole reason for the overlay.
+            modifier = if (locked) Modifier.clearAndSetSemantics { } else Modifier
+        ) {
+            NoteAppContent(viewModel)
+        }
+        if (locked) {
+            AppLockScreen(
+                onUnlock = { viewModel.markAppUnlocked() },
+                onLockUnavailable = { viewModel.setAppLockEnabled(false) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun NoteAppContent(viewModel: NoteViewModel) {
+    val navController = rememberNavController()
+
+    // A Task Reminders notification tap sets this; navigate to that note once,
+    // then clear it so backing out doesn't re-trigger the jump.
+    val pendingOpenNoteId by viewModel.pendingOpenNoteId.collectAsState()
+    LaunchedEffect(pendingOpenNoteId) {
+        pendingOpenNoteId?.let { id ->
+            navController.navigate("editor/$id") { launchSingleTop = true }
+            viewModel.consumeOpenNoteRequest()
+        }
     }
 
     // Settings is a pushed screen reached from the top-bar gear, not a bottom-nav
@@ -281,7 +332,26 @@ fun NoteApp(viewModel: NoteViewModel) {
                 },
                 onNavigateToTaskBoard = {
                     navController.navigate("task_board") { launchSingleTop = true }
+                },
+                onNavigateToGraphView = {
+                    navController.navigate("graph_view") { launchSingleTop = true }
+                },
+                onNavigateToTemplates = {
+                    navController.navigate("templates") { launchSingleTop = true }
                 }
+            )
+        }
+        composable("graph_view") {
+            com.l3ad3r1.octojotter.ui.graph.GraphViewScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToEditor = { noteId -> navController.navigate("editor/$noteId") }
+            )
+        }
+        composable("templates") {
+            TemplatesScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable("editor/{noteId}") { backStackEntry ->
@@ -314,12 +384,25 @@ fun NoteApp(viewModel: NoteViewModel) {
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlugins = { navController.navigate("plugins") { launchSingleTop = true } },
                 onNavigateToDebug = { navController.navigate("debuglogs") { launchSingleTop = true } },
-                onNavigateToSyncHealth = { navController.navigate("sync_health") { launchSingleTop = true } },
-                onNavigateToAiSettings = { navController.navigate("ai_settings") { launchSingleTop = true } }
+                onNavigateToBackupRestore = { navController.navigate("backup_restore") { launchSingleTop = true } },
+                onNavigateToAiSettings = { navController.navigate("ai_settings") { launchSingleTop = true } },
+                onNavigateToAppearance = { navController.navigate("appearance_settings") { launchSingleTop = true } },
+                onNavigateToTemplates = { navController.navigate("templates") { launchSingleTop = true } },
+                onNavigateToGraphView = { navController.navigate("graph_view") { launchSingleTop = true } }
+            )
+        }
+        composable("backup_restore") {
+            BackupRestoreScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSyncHealth = { navController.navigate("sync_health") { launchSingleTop = true } }
             )
         }
         composable("ai_settings") {
             AiSettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable("appearance_settings") {
+            AppearanceSettingsScreen(viewModel = viewModel, onNavigateBack = { navController.popBackStack() })
         }
         composable("trash") {
             TrashScreen(
@@ -355,22 +438,76 @@ fun NoteApp(viewModel: NoteViewModel) {
     }
 }
 
+/**
+ * Authenticators the app lock accepts: a Class 3 biometric **or** the device's
+ * own screen lock — pattern, PIN or password.
+ *
+ * The device credential is the important half. With biometrics alone, a phone
+ * or tablet with no fingerprint sensor (or no enrolled print, or a sensor that
+ * has stopped recognising its owner) could never get past this screen. The old
+ * answer to that was a "Turn off app lock" button on the lock screen itself,
+ * which granted full access without authenticating anything; anyone holding the
+ * device could tap it. Falling back to Android's own credential is what
+ * replaces it, and it needs no hardware at all.
+ *
+ * `BIOMETRIC_WEAK` rather than `BIOMETRIC_STRONG`, and that is a constraint
+ * rather than a preference: `androidx.biometric` rejects
+ * `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` on exactly API 28 and 29
+ * (`AuthenticatorUtils.isSupportedCombination`), where
+ * `PromptInfo.Builder.build()` throws `IllegalArgumentException` and
+ * `canAuthenticate()` returns `BIOMETRIC_ERROR_UNSUPPORTED`. With minSdk 24
+ * that would leave every Android 9 and 10 user facing a lock screen they cannot
+ * pass. `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` is accepted on every API level;
+ * `AppLockAuthenticatorTest` pins both halves of that on API 29 so the choice
+ * cannot be "tidied" into a lockout.
+ *
+ * Accepting a Class 2 biometric costs little here, because the device credential
+ * is an accepted authenticator anyway: anyone who can pass the phone's own lock
+ * screen can pass this one either way.
+ */
+private const val APP_LOCK_AUTHENTICATORS =
+    BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+
+/**
+ * Whether this device can authenticate the user at all.
+ *
+ * Deliberately just `isDeviceSecure`: a pattern, PIN or password is exactly what
+ * `DEVICE_CREDENTIAL` verifies against, and Android does not allow a biometric
+ * to be enrolled without one — so a secure lock screen is both necessary and
+ * sufficient. A tablet with no fingerprint reader returns true here and unlocks
+ * with its pattern; a device with no screen lock at all returns false, because
+ * there is genuinely nothing to check.
+ */
+internal fun canSatisfyAppLock(context: Context): Boolean =
+    ContextCompat.getSystemService(context, KeyguardManager::class.java)?.isDeviceSecure == true
+
+/**
+ * Full-screen authentication gate. Shared by the app lock and the per-note
+ * lock so both are backed by the same real check rather than one of them being
+ * a label. [extraAction] is an optional escape that does *not* grant access —
+ * "Go back", never "turn the lock off".
+ */
 @Composable
-fun AppLockScreen(
+private fun BiometricGate(
+    headline: String,
+    promptSubtitle: String,
     onUnlock: () -> Unit,
-    onDisableLock: () -> Unit
+    onBack: () -> Unit,
+    /** Offered only when the device has no screen lock left to check against. */
+    onLockUnavailable: (() -> Unit)? = null,
+    extraAction: (@Composable () -> Unit)? = null,
 ) {
+    // Back must not reach whatever is composed underneath this gate. Declared
+    // here rather than by each caller so no gate can forget it.
+    BackHandler(onBack = onBack)
     val context = LocalContext.current
-    val canAuthenticate = remember(context) {
-        BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
-            BiometricManager.BIOMETRIC_SUCCESS
-    }
+    val canAuthenticate = remember(context) { canSatisfyAppLock(context) }
     var message by remember { mutableStateOf<String?>(null) }
 
     fun launchBiometricPrompt() {
         val activity = context as? FragmentActivity
         if (activity == null) {
-            message = "Biometric unlock is not available in this window."
+            message = "Unlock is not available in this window."
             return
         }
         val prompt = BiometricPrompt(
@@ -386,16 +523,27 @@ fun AppLockScreen(
                 }
 
                 override fun onAuthenticationFailed() {
-                    message = "Fingerprint not recognized."
+                    message = "Not recognized. Try again."
                 }
             }
         )
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Unlock Octo Jotter")
-            .setSubtitle("Use your fingerprint to open your notes")
-            .setNegativeButtonText("Cancel")
-            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
-            .build()
+        // No negative button: PromptInfo rejects one when DEVICE_CREDENTIAL is
+        // an allowed authenticator, and the credential screen has its own
+        // cancel affordance.
+        val promptInfo = try {
+            BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Unlock Octo Jotter")
+                .setSubtitle(promptSubtitle)
+                .setAllowedAuthenticators(APP_LOCK_AUTHENTICATORS)
+                .build()
+        } catch (e: IllegalArgumentException) {
+            // build() throws when the OS rejects the authenticator combination.
+            // It should not with the combination above, but a thrown exception
+            // here would be an unrecoverable lockout rather than a crash report,
+            // so surface it instead of letting it propagate.
+            message = "This device can't show the unlock prompt (${e.message})."
+            return
+        }
         prompt.authenticate(promptInfo)
     }
 
@@ -406,7 +554,19 @@ fun AppLockScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
+            .background(MaterialTheme.colorScheme.surface)
+            // Swallow every pointer event. An opaque background hides the
+            // screen underneath but does not stop taps, drags or scrolls
+            // reaching it — which for a lock screen drawn over live content
+            // would mean the notes were still operable while "locked".
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial)
+                            .changes.forEach { it.consume() }
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -423,15 +583,17 @@ fun AppLockScreen(
                 modifier = Modifier.size(64.dp)
             )
             Text(
-                text = "Octo Jotter is locked",
+                text = headline,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = if (canAuthenticate) {
-                    "Unlock with your fingerprint to continue."
+                    "Unlock with your fingerprint, pattern, PIN or password to continue."
                 } else {
-                    "Fingerprint unlock is not set up on this device."
+                    "This device no longer has a screen lock, so there is no pattern, " +
+                        "PIN, password or fingerprint left to check. Set one up in Android " +
+                        "Settings to keep using the app lock."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -445,9 +607,27 @@ fun AppLockScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Unlock")
             }
-            TextButton(onClick = onDisableLock) {
-                Text("Turn off app lock")
+            if (!canAuthenticate) {
+                // Reachable only by removing the device's screen lock *after*
+                // enabling the app lock — which itself required that screen
+                // lock. It is not the hole the old "Turn off app lock" button
+                // was: there is now genuinely no credential to authenticate
+                // against, so this cannot be used to get past one. Leaving the
+                // user with a dead screen and no route out would strand them
+                // and their notes.
+                Button(
+                    onClick = { runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) } },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open Android security settings")
+                }
+                onLockUnavailable?.let { disable ->
+                    TextButton(onClick = disable) {
+                        Text("Continue without an app lock")
+                    }
+                }
             }
+            extraAction?.invoke()
             message?.let {
                 Text(
                     text = it,
@@ -459,16 +639,65 @@ fun AppLockScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun AppLockScreen(onUnlock: () -> Unit, onLockUnavailable: () -> Unit) {
+    val context = LocalContext.current
+    BiometricGate(
+        headline = "Octo Jotter is locked",
+        promptSubtitle = "Use your fingerprint, pattern, PIN or password to open your notes",
+        onUnlock = onUnlock,
+        // Back sends the app to the background rather than dismissing the lock
+        // or falling through to the notes list underneath.
+        onBack = { (context as? android.app.Activity)?.moveTaskToBack(true) },
+        onLockUnavailable = onLockUnavailable,
+    )
+}
+
+/**
+ * Gate in front of a note the user marked Locked.
+ *
+ * "Locked" used to blank the note's list preview and nothing else: the editor
+ * opened it in plain text and full-text search matched its body, so the flag
+ * promised protection it did not provide. It is a real boundary now — here in
+ * the editor, and in the search queries in `NoteDao`.
+ */
+@Composable
+private fun NoteLockScreen(onUnlock: () -> Unit, onBack: () -> Unit) {
+    BiometricGate(
+        headline = "This note is locked",
+        promptSubtitle = "Use your fingerprint or screen lock to open this note",
+        onUnlock = onUnlock,
+        onBack = onBack,
+        extraAction = {
+            TextButton(onClick = onBack) { Text("Go back") }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun NotesListScreen(
     viewModel: NoteViewModel,
     onNavigateToEditor: (Int) -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToTrash: () -> Unit,
-    onNavigateToTaskBoard: () -> Unit
+    onNavigateToTaskBoard: () -> Unit,
+    onNavigateToGraphView: () -> Unit,
+    onNavigateToTemplates: () -> Unit,
 ) {
     val notes by viewModel.filteredNotes.collectAsState()
+    val onDeviceAiEnabled by viewModel.onDeviceAiEnabled.collectAsState()
+    val dailyNotesEnabled by viewModel.dailyNotesEnabled.collectAsState()
+    val templatesEnabled by viewModel.templatesEnabled.collectAsState()
+    val graphViewEnabled by viewModel.graphViewEnabled.collectAsState()
+    val commandPaletteEnabled by viewModel.commandPaletteEnabled.collectAsState()
+    val templates by viewModel.templates.collectAsState()
+    var showCommandPalette by remember { mutableStateOf(false) }
+    var showTemplatePicker by remember { mutableStateOf(false) }
+    // Google's own "medium window" breakpoint (600dp) — the point where a
+    // phone-shaped bottom nav has room to just show every destination instead
+    // of tucking the extras behind the hamburger drawer.
+    val isTablet = LocalConfiguration.current.screenWidthDp >= 600
     val selectedTag by viewModel.selectedTag.collectAsState()
     val availableTags by viewModel.availableTags.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
@@ -478,6 +707,7 @@ fun NotesListScreen(
     val embeddingModelReady by viewModel.embeddingModelReady.collectAsState()
     val embeddingDownload by viewModel.embeddingDownload.collectAsState()
     var searchExpanded by remember { mutableStateOf(false) }
+    var tagsExpanded by remember { mutableStateOf(false) }
     var showModelConsent by remember { mutableStateOf(false) }
     val sortBy by viewModel.sortBy.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
@@ -499,6 +729,21 @@ fun NotesListScreen(
     var noteToRename by remember { mutableStateOf<NoteEntity?>(null) }
     var renameText by remember { mutableStateOf("") }
     var noteToMove by remember { mutableStateOf<NoteEntity?>(null) }
+    var noteColorTarget by remember { mutableStateOf<NoteEntity?>(null) }
+    var noteReminderTarget by remember { mutableStateOf<NoteEntity?>(null) }
+    val taskRemindersEnabled by viewModel.taskRemindersEnabled.collectAsState()
+    // Android 13+ gates any posted notification behind this; requested the
+    // first time a reminder is set rather than on app launch, so it's clear
+    // why the app wants it. Declining just means reminders are silently
+    // unable to notify — the reminder itself still saves.
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* no-op either way — the note-level reminder still gets saved */ }
+    fun requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // On the home list: back closes an open drawer; otherwise require a second
     // back press within 2s to exit, with a toast confirming the first press.
@@ -613,6 +858,31 @@ fun NotesListScreen(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_task_board")
                 )
 
+                // These plugin-contributed destinations live here, behind the
+                // hamburger, only on a phone-width screen. On a tablet they're
+                // promoted straight into the bottom bar instead — see the
+                // bottomBar block below — so they're never hidden behind a
+                // button when there's room to just show them.
+                // "Today" and "Templates" moved out of here entirely — both are
+                // pure creation shortcuts now, and live in the FAB's speed dial
+                // instead (see the floatingActionButton slot below). Graph View
+                // is a browsing destination, so it still needs a way in on a
+                // phone-width screen where it isn't promoted to the bottom bar.
+                if (!isTablet) {
+                    if (graphViewEnabled) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Default.Hub, contentDescription = null) },
+                            label = { Text("Graph View") },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                onNavigateToGraphView()
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).testTag("folder_item_graph_view")
+                        )
+                    }
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                 // Nested folder tree - repos nest into their folders. Built from
@@ -715,11 +985,20 @@ fun NotesListScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        if (searchExpanded) {
+                        if (tagsExpanded) {
+                            Text("All tags", fontWeight = FontWeight.Bold)
+                        } else {
+                            // The search bar itself, always here — not an icon
+                            // that expands into one. Typing filters the library
+                            // below live; there's nothing to open or close.
                             OutlinedTextField(
                                 value = searchQuery,
-                                onValueChange = { viewModel.updateSearchQuery(it) },
+                                onValueChange = {
+                                    searchExpanded = true
+                                    viewModel.updateSearchQuery(it)
+                                },
                                 singleLine = true,
+                                shape = OctoShapes.pill,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("search_field"),
@@ -734,23 +1013,24 @@ fun NotesListScreen(
                                     if (isSmartSearching) {
                                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                     } else if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { viewModel.updateSearchQuery("") }) {
+                                        IconButton(onClick = {
+                                            searchExpanded = false
+                                            viewModel.updateSearchQuery("")
+                                        }) {
                                             Icon(Icons.Default.Close, contentDescription = "Clear")
                                         }
                                     }
                                 },
                             )
-                        } else {
-                            Text("Octo Jotter", fontWeight = FontWeight.Bold)
                         }
                     },
                     navigationIcon = {
-                        if (searchExpanded) {
-                            IconButton(onClick = {
-                                searchExpanded = false
-                                viewModel.updateSearchQuery("")
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                        if (tagsExpanded) {
+                            IconButton(
+                                onClick = { tagsExpanded = false },
+                                modifier = Modifier.testTag("close_tags_button")
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close tags")
                             }
                         } else {
                             IconButton(
@@ -762,22 +1042,12 @@ fun NotesListScreen(
                         }
                     },
                     actions = {
-                        if (!searchExpanded) {
-                            if (viewModel.semanticSearchAvailable) {
-                                IconButton(
-                                    onClick = {
-                                        context.startActivity(Intent(context, AiChatActivity::class.java))
-                                    },
-                                    modifier = Modifier.testTag("open_chat_button"),
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes")
-                                }
-                            }
+                        if (!tagsExpanded && commandPaletteEnabled) {
                             IconButton(
-                                onClick = { searchExpanded = true },
-                                modifier = Modifier.testTag("open_search_button"),
+                                onClick = { showCommandPalette = true },
+                                modifier = Modifier.testTag("open_command_palette_button")
                             ) {
-                                Icon(Icons.Default.Search, contentDescription = "Search")
+                                Icon(Icons.Default.Search, contentDescription = "Command palette")
                             }
                         }
                     },
@@ -793,20 +1063,56 @@ fun NotesListScreen(
                     NavigationBarItem(
                         icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Notes") },
                         label = { Text("Notes") },
-                        selected = true,
-                        onClick = { /* Already here */ }
+                        selected = !tagsExpanded,
+                        onClick = { tagsExpanded = false }
                     )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                        label = { Text("Search") },
-                        selected = searchExpanded,
-                        onClick = { searchExpanded = true }
-                    )
+                    // Search is the always-visible bar up top now, not a
+                    // destination — so this slot is Ask AI outright, and only
+                    // where there's an AI to ask and the On-device AI feature
+                    // plugin is actually enabled.
+                    if (viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes") },
+                            label = { Text("Ask AI") },
+                            selected = false,
+                            onClick = { context.startActivity(Intent(context, AiChatActivity::class.java)) },
+                            modifier = Modifier.testTag("open_chat_button")
+                        )
+                    }
+                    // On a tablet-width screen these plugin destinations are
+                    // promoted straight into the bar instead of sitting behind
+                    // the hamburger drawer — see the ModalDrawerSheet above,
+                    // which hides these same items when isTablet is true.
+                    // "Today" and "Templates" don't need a spot here any more —
+                    // both are pure creation shortcuts now, and the FAB's speed
+                    // dial covers that; this bar keeps only things you browse.
+                    if (isTablet) {
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.CheckBox, contentDescription = "Task Board") },
+                            label = { Text("Tasks") },
+                            selected = false,
+                            onClick = onNavigateToTaskBoard,
+                            modifier = Modifier.testTag("nav_task_board_button")
+                        )
+                        if (graphViewEnabled) {
+                            NavigationBarItem(
+                                icon = { Icon(Icons.Default.Hub, contentDescription = "Graph View") },
+                                label = { Text("Graph") },
+                                selected = false,
+                                onClick = onNavigateToGraphView,
+                                modifier = Modifier.testTag("nav_graph_view_button")
+                            )
+                        }
+                    }
                     NavigationBarItem(
                         icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
                         label = { Text("Tags") },
-                        selected = false,
-                        onClick = { /* TODO */ }
+                        selected = tagsExpanded,
+                        onClick = {
+                            searchExpanded = false
+                            tagsExpanded = true
+                        },
+                        modifier = Modifier.testTag("nav_tags_button")
                     )
                     NavigationBarItem(
                         icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
@@ -817,15 +1123,22 @@ fun NotesListScreen(
                 }
             },
             floatingActionButton = {
-                FloatingActionButton(
-                    onClick = { viewModel.createNewNote { newId -> onNavigateToEditor(newId) } },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape,
-                    modifier = Modifier.testTag("add_note_fab")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Note")
-                }
+                // Every "create a new X" shortcut lives behind this one circular
+                // button now, rather than each new creation-flavoured plugin
+                // claiming another permanent slot on the bottom bar or a second
+                // stacked FAB. Tapping an item runs it and collapses the menu;
+                // tapping the main button again (now an X) collapses it with no
+                // action — the standard Material speed-dial contract.
+                NoteCreationFabMenu(
+                    onNewNote = { viewModel.createNewNote { newId -> onNavigateToEditor(newId) } },
+                    onNewTask = { viewModel.createNewTask { newId -> onNavigateToEditor(newId) } },
+                    onToday = if (dailyNotesEnabled) {
+                        { viewModel.openOrCreateDailyNote(onNavigateToEditor) }
+                    } else null,
+                    onFromTemplate = if (templatesEnabled && templates.isNotEmpty()) {
+                        { showTemplatePicker = true }
+                    } else null,
+                )
             }
         ) { innerPadding ->
         Column(
@@ -834,9 +1147,80 @@ fun NotesListScreen(
                 .padding(innerPadding)
         ) {
 
-            // Keyword vs Smart (semantic) search — only while searching and only
-            // on devices that can run on-device AI (arm64 + enough RAM).
-            if (searchExpanded && viewModel.semanticSearchAvailable) {
+            if (tagsExpanded) {
+                TagsBrowser(
+                    tags = availableTags,
+                    selectedTag = selectedTag,
+                    onSelectTag = { tag ->
+                        viewModel.selectTag(tag)
+                        tagsExpanded = false
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+
+            val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
+            var sortMenuExpanded by remember { mutableStateOf(false) }
+            LibraryHeader(
+                noteCount = notes.size,
+                trailingControls = {
+                    // Sort collapses two mutually exclusive values into one
+                    // dropdown instead of a two-segment row; grouped/list is a
+                    // plain binary toggle, so one icon button that flips it —
+                    // its own icon showing the current state — stands in for
+                    // the chip that used to spell it out in text. Both sit on
+                    // the same bar as the title now, not a row of their own.
+                    Box {
+                        IconButton(
+                            onClick = { sortMenuExpanded = true },
+                            modifier = Modifier.testTag("sort_menu_button")
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort: ${if (sortBy == "TITLE") "Title" else "Recent"}"
+                            )
+                        }
+                        DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Recent") },
+                                onClick = {
+                                    viewModel.updateSortBy("LAST_MODIFIED")
+                                    sortMenuExpanded = false
+                                },
+                                leadingIcon = if (sortBy == "LAST_MODIFIED") {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null,
+                                modifier = Modifier.testTag("sort_by_modified_chip")
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Title") },
+                                onClick = {
+                                    viewModel.updateSortBy("TITLE")
+                                    sortMenuExpanded = false
+                                },
+                                leadingIcon = if (sortBy == "TITLE") {
+                                    { Icon(Icons.Default.Check, contentDescription = null) }
+                                } else null,
+                                modifier = Modifier.testTag("sort_by_title_chip")
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { viewModel.toggleFolderTreeView() },
+                        modifier = Modifier.testTag("folder_tree_view_toggle")
+                    ) {
+                        Icon(
+                            imageVector = if (isFolderTreeView) Icons.Default.Folder else Icons.AutoMirrored.Filled.List,
+                            contentDescription = if (isFolderTreeView) "Grouped view — tap for list" else "List view — tap for grouped"
+                        )
+                    }
+                }
+            )
+
+            // Keyword vs Smart (semantic) search — only once there's something
+            // to search for, only on devices that can run on-device AI (arm64
+            // + enough RAM), and only while the On-device AI feature is enabled.
+            if (searchQuery.isNotEmpty() && viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -908,98 +1292,8 @@ fun NotesListScreen(
                 )
             }
 
-            // Sort + view controls in one horizontally scrollable row so they never
-            // overflow or crush each other on narrow screens.
-            val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = sortBy == "LAST_MODIFIED",
-                    onClick = { viewModel.updateSortBy("LAST_MODIFIED") },
-                    label = { Text("Recent") },
-                    leadingIcon = if (sortBy == "LAST_MODIFIED") {
-                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                    } else null,
-                    modifier = Modifier.testTag("sort_by_modified_chip")
-                )
-                FilterChip(
-                    selected = sortBy == "TITLE",
-                    onClick = { viewModel.updateSortBy("TITLE") },
-                    label = { Text("Title") },
-                    leadingIcon = if (sortBy == "TITLE") {
-                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                    } else null,
-                    modifier = Modifier.testTag("sort_by_title_chip")
-                )
-                FilterChip(
-                    selected = isFolderTreeView,
-                    onClick = { viewModel.toggleFolderTreeView() },
-                    label = { Text(if (isFolderTreeView) "Grouped" else "List") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (isFolderTreeView) Icons.Default.Folder else Icons.AutoMirrored.Filled.List,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("folder_tree_view_toggle")
-                )
-            }
-
-            AnimatedVisibility(visible = availableTags.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Filter by tag:",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = selectedTag == null,
-                                onClick = { viewModel.selectTag(null) },
-                                label = { Text("All") },
-                                modifier = Modifier.testTag("tag_filter_all_chip")
-                            )
-                        }
-                        items(availableTags) { tag ->
-                            FilterChip(
-                                selected = selectedTag == tag,
-                                onClick = { viewModel.selectTag(tag) },
-                                label = { Text(tag) },
-                                leadingIcon = if (selectedTag == tag) {
-                                    {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                                modifier = Modifier.testTag("tag_filter_${tag}_chip")
-                            )
-                        }
-                    }
-                }
-            }
+            // Tag filtering has one entry point now — the bottom NavigationBar's
+            // Tags destination (TagsBrowser) — instead of repeating it here too.
 
             Box(
                 modifier = Modifier
@@ -1088,135 +1382,12 @@ fun NotesListScreen(
                     }
                 } else {
                     val renderNoteCard: @Composable (NoteEntity) -> Unit = { note ->
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { dismissValue ->
-                                if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                    notePendingDelete = note
-                                    false
-                                } else {
-                                    false
-                                }
-                            }
+                        NoteCard(
+                            note = note,
+                            onOpen = { onNavigateToEditor(note.id) },
+                            onLongPress = { noteMenuTarget = note },
+                            onDeleteRequest = { notePendingDelete = note },
                         )
-
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            backgroundContent = {
-                                val color = if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart) {
-                                    MaterialTheme.colorScheme.errorContainer
-                                } else {
-                                    Color.Transparent
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(color, RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Note",
-                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            },
-                            enableDismissFromStartToEnd = false,
-                            enableDismissFromEndToStart = true
-                        ) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = { onNavigateToEditor(note.id) },
-                                        onLongClick = { noteMenuTarget = note }
-                                    )
-                                    .testTag("note_item_card_${note.id}"),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = note.displayTitle.ifBlank { "Untitled Note" },
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = formatRelativeTimestamp(note.lastModifiedLocally),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.Description, // Using Description as fallback for M down icon
-                                            contentDescription = "Markdown Note",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = if (note.locked) "Locked note" else note.content.ifBlank { "No content..." },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (note.tags.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            note.tags.take(3).forEach { tag ->
-                                                Surface(
-                                                    shape = CircleShape,
-                                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                                                    modifier = Modifier.testTag("note_card_tag_${note.id}_$tag")
-                                                ) {
-                                                    Text(
-                                                        text = tag,
-                                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                            if (note.tags.size > 3) {
-                                                Surface(
-                                                    shape = CircleShape,
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                                ) {
-                                                    Text(
-                                                        text = "+${note.tags.size - 3}",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     }
 
                     val isFolderTreeView by viewModel.isFolderTreeView.collectAsState()
@@ -1311,6 +1482,7 @@ fun NotesListScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -1408,6 +1580,27 @@ fun NotesListScreen(
                     }
                     TextButton(
                         onClick = {
+                            noteColorTarget = note
+                            noteMenuTarget = null
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("note_action_color_${note.id}")
+                    ) {
+                        Text("Set color")
+                    }
+                    if (taskRemindersEnabled) {
+                        TextButton(
+                            onClick = {
+                                requestNotificationPermissionIfNeeded()
+                                noteReminderTarget = note
+                                noteMenuTarget = null
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("note_action_reminder_${note.id}")
+                        ) {
+                            Text(if (note.reminderAt != null) "Change reminder" else "Set reminder")
+                        }
+                    }
+                    TextButton(
+                        onClick = {
                             viewModel.toggleLockNote(note)
                             noteMenuTarget = null
                         },
@@ -1431,6 +1624,113 @@ fun NotesListScreen(
                 TextButton(onClick = { noteMenuTarget = null }) {
                     Text("Close")
                 }
+            }
+        )
+    }
+
+    noteColorTarget?.let { note ->
+        AlertDialog(
+            onDismissRequest = { noteColorTarget = null },
+            title = { Text("Note color") },
+            text = {
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // "No color" swatch resets to the card's normal surface tone.
+                    ColorSwatch(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        selected = note.color == null,
+                        contentDescription = "No color",
+                        testTag = "note_color_none",
+                        onClick = {
+                            viewModel.setNoteColor(note, null)
+                            noteColorTarget = null
+                        }
+                    )
+                    NoteColor.entries.forEach { color ->
+                        ColorSwatch(
+                            color = color.containerColor(),
+                            selected = note.color == color.id,
+                            contentDescription = color.label,
+                            testTag = "note_color_${color.id}",
+                            onClick = {
+                                viewModel.setNoteColor(note, color.id)
+                                noteColorTarget = null
+                            }
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { noteColorTarget = null }) { Text("Close") }
+            }
+        )
+    }
+
+    noteReminderTarget?.let { note ->
+        ReminderPickerDialog(
+            initialMillis = note.reminderAt,
+            onDismiss = { noteReminderTarget = null },
+            onConfirm = { millis ->
+                viewModel.setNoteReminder(note, millis)
+                noteReminderTarget = null
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = if (millis != null) "Reminder set" else "Reminder cleared",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        )
+    }
+
+    if (showCommandPalette) {
+        CommandPalette(
+            notes = notes,
+            onDismiss = { showCommandPalette = false },
+            onOpenNote = onNavigateToEditor,
+            onNewNote = { viewModel.createNewNote { newId -> onNavigateToEditor(newId) } },
+            onOpenDailyNote = if (dailyNotesEnabled) {
+                { viewModel.openOrCreateDailyNote(onNavigateToEditor) }
+            } else null,
+            onOpenAskAi = if (viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
+                { context.startActivity(Intent(context, AiChatActivity::class.java)) }
+            } else null,
+            onOpenGraphView = if (graphViewEnabled) onNavigateToGraphView else null,
+            onOpenSettings = onNavigateToSettings,
+            onToggleDarkMode = {
+                val next = if (viewModel.themeMode.value == "dark") "light" else "dark"
+                viewModel.setThemeMode(next)
+            }
+        )
+    }
+
+    if (showTemplatePicker) {
+        AlertDialog(
+            onDismissRequest = { showTemplatePicker = false },
+            title = { Text("New note from template") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    templates.forEach { template ->
+                        TextButton(
+                            onClick = {
+                                showTemplatePicker = false
+                                viewModel.createNoteFromTemplate(template, title = "") { newId ->
+                                    onNavigateToEditor(newId)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("template_picker_${template.id}")
+                        ) {
+                            Text(template.name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showTemplatePicker = false }) { Text("Cancel") }
             }
         )
     }
@@ -1916,6 +2216,15 @@ fun EditorScreen(
     }
 
     val note by viewModel.editingNote.collectAsState()
+
+    // A locked note has to be authenticated for before its text is on screen.
+    // Scoped to noteId so backing out and reopening asks again.
+    var noteUnlocked by remember(noteId) { mutableStateOf(false) }
+    if (note?.locked == true && !noteUnlocked) {
+        NoteLockScreen(onUnlock = { noteUnlocked = true }, onBack = onNavigateBack)
+        return
+    }
+
     val editorTitle by viewModel.editorTitle.collectAsState()
     val editorContent by viewModel.editorContent.collectAsState()
     val saveStatus by viewModel.saveStatus.collectAsState()
@@ -2218,33 +2527,49 @@ fun EditorScreen(
         }
     }
 
+    val ocrScanEnabled by viewModel.ocrScanEnabled.collectAsState()
+
     val editorToolbar: @Composable () -> Unit = {
-        EditorToolbar(
-            value = textFieldValue,
-            onValueChange = { applyEdit(it) },
-            onPickImage = { imagePicker.launch("image/*") },
-            onDraw = { showDrawingDialog = true },
-            fontSize = editorFontSize,
-            onFontSizeChange = { viewModel.setEditorFontSize(it) },
-            monospace = editorMonospace,
-            onMonospaceChange = { viewModel.setEditorMonospace(it) },
-            canUndo = history.canUndo,
-            onUndo = {
-                history.undo()?.let { restored ->
-                    textFieldValue = restored
-                    pushBody(editorTitle, restored.text)
+        val toolbarContent: @Composable (onScanText: (() -> Unit)?, scanBusy: Boolean) -> Unit = { onScanText, scanBusy ->
+            EditorToolbar(
+                value = textFieldValue,
+                onValueChange = { applyEdit(it) },
+                onPickImage = { imagePicker.launch("image/*") },
+                onDraw = { showDrawingDialog = true },
+                fontSize = editorFontSize,
+                onFontSizeChange = { viewModel.setEditorFontSize(it) },
+                monospace = editorMonospace,
+                onMonospaceChange = { viewModel.setEditorMonospace(it) },
+                canUndo = history.canUndo,
+                onUndo = {
+                    history.undo()?.let { restored ->
+                        textFieldValue = restored
+                        pushBody(editorTitle, restored.text)
+                    }
+                },
+                canRedo = history.canRedo,
+                onRedo = {
+                    history.redo()?.let { restored ->
+                        textFieldValue = restored
+                        pushBody(editorTitle, restored.text)
+                    }
+                },
+                pluginActions = pluginActions,
+                onPluginAction = onPluginAction,
+                onScanText = onScanText,
+                scanBusy = scanBusy
+            )
+        }
+        if (ocrScanEnabled) {
+            com.l3ad3r1.octojotter.ocr.ScanTextAction(
+                onTextRecognized = { text -> insertTextAtCursor("\n$text\n") },
+                onError = { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
-            },
-            canRedo = history.canRedo,
-            onRedo = {
-                history.redo()?.let { restored ->
-                    textFieldValue = restored
-                    pushBody(editorTitle, restored.text)
-                }
-            },
-            pluginActions = pluginActions,
-            onPluginAction = onPluginAction
-        )
+            ) { onClick, busy -> toolbarContent(onClick, busy) }
+        } else {
+            toolbarContent(null, false)
+        }
     }
 
     // Live document stats for the editor subtitle.
@@ -3318,22 +3643,331 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToDebug: () -> Unit = {},
-    onNavigateToSyncHealth: () -> Unit = {},
-    onNavigateToAiSettings: () -> Unit = {}
+    onNavigateToBackupRestore: () -> Unit = {},
+    onNavigateToAiSettings: () -> Unit = {},
+    onNavigateToAppearance: () -> Unit = {},
+    onNavigateToTemplates: () -> Unit = {},
+    onNavigateToGraphView: () -> Unit = {}
 ) {
     // Tapping the version number 7x reveals the hidden debug log viewer.
     var versionTaps by remember { mutableStateOf(0) }
-    val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val lastExportedPath by viewModel.lastExportedPath.collectAsState()
     val updateStatus by viewModel.updateStatus.collectAsState()
     val downloadStatus by viewModel.downloadStatus.collectAsState()
+    val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+    val settingsContext = LocalContext.current
+    // Read on each recomposition rather than remembered: the user may leave for
+    // Android Settings, add a screen lock, and come straight back to this row.
+    val deviceCanLock = canSatisfyAppLock(settingsContext)
+    val onDeviceAiEnabled by viewModel.onDeviceAiEnabled.collectAsState()
+    val templatesEnabled by viewModel.templatesEnabled.collectAsState()
+    val graphViewEnabled by viewModel.graphViewEnabled.collectAsState()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("settings_back_button")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                // No profile action — it opened nothing.
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // ---- Backup / Restore ----
+            // GitHub account, Sync Health, Repository Sync, and local export/
+            // import all live behind one nested screen now instead of three
+            // top-level sections.
+            SettingsSection(title = "Backup / Restore") {
+                SettingsNavRow(
+                    icon = Icons.Default.Storage,
+                    title = "Backup / Restore",
+                    subtitle = "GitHub sync, sync health, repositories, and local export/import.",
+                    onClick = onNavigateToBackupRestore,
+                    testTag = "backup_restore_card"
+                )
+            }
+
+            // ---- Security ----
+            SettingsSection(title = "Security") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("app_lock_card"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column {
+                            Text(
+                                // Not "Fingerprint App Lock": the lock accepts
+                                // the device credential too, and naming only the
+                                // hardware told every fingerprint-less phone and
+                                // tablet the feature wasn't for them.
+                                text = "App Lock",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (deviceCanLock) {
+                                    "Require your fingerprint, pattern, PIN or password when opening Octo Jotter."
+                                } else {
+                                    "Needs a device screen lock. Set a pattern, PIN or password in " +
+                                        "Android Settings first — without one there is nothing for the " +
+                                        "app lock to check."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = appLockEnabled,
+                        onCheckedChange = { viewModel.setAppLockEnabled(it) },
+                        // Turning this on without a screen lock would produce a
+                        // lock screen with nothing to authenticate against, so
+                        // it is refused here rather than stranding the user at
+                        // an unusable prompt later. Always allowed to turn OFF.
+                        enabled = deviceCanLock || appLockEnabled,
+                        modifier = Modifier.testTag("app_lock_toggle")
+                    )
+                }
+            }
+
+            // ---- Extend ----
+            SettingsSection(title = "Extend") {
+                SettingsNavRow(
+                    icon = Icons.Default.Extension,
+                    title = "Community Plugins",
+                    subtitle = "Browse and install themes and packs from the community.",
+                    onClick = onNavigateToPlugins,
+                    testTag = "community_plugins_card"
+                )
+                // On-device AI is the other built-in feature plugin — its own
+                // nav row only when enabled, same as GitHub Sync above.
+                if (onDeviceAiEnabled) {
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        icon = Icons.Default.AutoAwesome,
+                        title = "On-device AI",
+                        subtitle = "Manage the chat (LLM) and semantic-search models. Runs fully on your device.",
+                        onClick = onNavigateToAiSettings,
+                        testTag = "ai_settings_card"
+                    )
+                }
+                if (templatesEnabled) {
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        icon = Icons.Default.Description,
+                        title = "Templates",
+                        subtitle = "Manage note templates with {{date}}, {{time}}, and {{title}} variables.",
+                        onClick = onNavigateToTemplates,
+                        testTag = "templates_settings_card"
+                    )
+                }
+                if (graphViewEnabled) {
+                    HorizontalDivider()
+                    SettingsNavRow(
+                        icon = Icons.Default.Hub,
+                        title = "Graph View",
+                        subtitle = "Visualize how your notes connect through [[wikilinks]].",
+                        onClick = onNavigateToGraphView,
+                        testTag = "graph_view_settings_card"
+                    )
+                }
+            }
+
+            // ---- Appearance ----
+            // Dark mode, the app font, and any downloaded theme all moved
+            // behind one nested screen instead of a lone toggle out here —
+            // there was nowhere for the theme list or the font picker to go
+            // without it.
+            SettingsSection(title = "Appearance") {
+                SettingsNavRow(
+                    icon = Icons.Default.Palette,
+                    title = "Appearance",
+                    subtitle = "Theme, dark mode, and font.",
+                    onClick = onNavigateToAppearance,
+                    testTag = "appearance_settings_card"
+                )
+            }
+
+            // ---- About ----
+            if (BuildConfig.SELF_UPDATE_ENABLED) {
+                SettingsSection(title = "About") {
+                    Column(modifier = Modifier.fillMaxWidth().testTag("update_settings_card")) {
+                        Text(
+                            text = "Current version ${viewModel.currentVersionName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .clickable {
+                                    versionTaps++
+                                    if (versionTaps >= 7) {
+                                        versionTaps = 0
+                                        onNavigateToDebug()
+                                    }
+                                }
+                                .testTag("version_tap_target")
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        when (val status = updateStatus) {
+                            is UpdateStatus.Available -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudDone,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.octoStatus.syncOk,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Version ${status.latestVersion} is available",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (status.notes.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = status.notes,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        maxLines = 6,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                val dl = downloadStatus
+                                if (status.apkUrl != null) {
+                                    Button(
+                                        onClick = { viewModel.downloadAndInstallUpdate(status.apkUrl, status.latestVersion) },
+                                        enabled = dl !is DownloadStatus.Downloading && dl !is DownloadStatus.Installing,
+                                        modifier = Modifier.fillMaxWidth().testTag("download_update_button")
+                                    ) {
+                                        when (dl) {
+                                            is DownloadStatus.Downloading -> {
+                                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Downloading ${dl.percent}%")
+                                            }
+                                            DownloadStatus.Installing -> Text("Opening installer...")
+                                            else -> {
+                                                Icon(Icons.Default.Download, contentDescription = null)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Download & install v${status.latestVersion}")
+                                            }
+                                        }
+                                    }
+                                    if (dl is DownloadStatus.Failed) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = dl.message,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        TextButton(onClick = { uriHandler.openUri(status.releaseUrl) }) {
+                                            Text("Open release in browser instead")
+                                        }
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = { uriHandler.openUri(status.releaseUrl) },
+                                        modifier = Modifier.fillMaxWidth().testTag("download_update_button")
+                                    ) {
+                                        Icon(Icons.Default.Download, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("View release")
+                                    }
+                                }
+                            }
+                            else -> {
+                                Button(
+                                    onClick = { viewModel.checkForUpdate() },
+                                    enabled = status != UpdateStatus.Checking,
+                                    modifier = Modifier.fillMaxWidth().testTag("check_update_button")
+                                ) {
+                                    if (status == UpdateStatus.Checking) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Checking...")
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Check for updates")
+                                    }
+                                }
+                                val statusLine = when (status) {
+                                    UpdateStatus.UpToDate -> "You're on the latest version." to MaterialTheme.octoStatus.syncOk
+                                    is UpdateStatus.Error -> status.message to MaterialTheme.colorScheme.error
+                                    else -> null
+                                }
+                                statusLine?.let { (msg, tint) ->
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = msg,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = tint,
+                                        modifier = Modifier.testTag("update_status_text")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Nested Settings screen bundling everything to do with getting notes in or
+ * out of this device: the GitHub Sync feature plugin's account/health/repo
+ * controls (only when that plugin is installed) and local export/import/
+ * share, which always works since it never depends on any plugin.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BackupRestoreScreen(
+    viewModel: NoteViewModel,
+    onNavigateBack: () -> Unit = {},
+    onNavigateToSyncHealth: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val lastExportedPath by viewModel.lastExportedPath.collectAsState()
     val token by viewModel.githubToken.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val syncMessage by viewModel.syncMessage.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
     val exportStatus by viewModel.exportStatus.collectAsState()
-    val appLockEnabled by viewModel.appLockEnabled.collectAsState()
+    val githubSyncEnabled by viewModel.githubSyncEnabled.collectAsState()
 
     val repositories by viewModel.repositories.collectAsState()
     val selectedRepository by viewModel.selectedRepository.collectAsState()
@@ -3381,15 +4015,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
+                title = { Text("Backup / Restore", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("settings_back_button")) {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("backup_restore_back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { /* Handle profile */ }) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -3404,253 +4033,142 @@ fun SettingsScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            // ---- GitHub account & Sync ----
+            // Both are the "GitHub Sync" built-in feature plugin — nothing
+            // shows here at all until it's installed from Community Plugins,
+            // same as any other not-yet-installed plugin gets no placeholder
+            // in Settings.
+            if (githubSyncEnabled) {
+            SettingsSection(title = "GitHub account") {
+                Text(
+                    text = "Connect a Personal Access Token to sync your notes — `gist` scope for Gist sync, `repo` scope to sync whole repositories.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = inputToken,
+                    onValueChange = { inputToken = it },
+                    label = { Text("GitHub Personal Access Token") },
+                    placeholder = { Text("ghp_...") },
+                    singleLine = true,
+                    visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                            Icon(
+                                imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (tokenVisible) "Hide Token" else "Show Token"
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("github_token_input")
+                )
+                Button(
+                    onClick = { viewModel.saveToken(inputToken.trim()) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("save_token_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = "To sync your notes, configure a GitHub Personal Access Token (PAT). Use the `gist` scope for Gist sync, and the `repo` scope to sync whole repositories below.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("Save Securely")
                 }
-                
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                if (token.isNotEmpty()) {
+                    TextButton(
+                        onClick = { showClearTokenConfirm = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("clear_token_button")
+                    ) {
+                        Text("Disconnect GitHub", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
 
-                Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = inputToken,
-                        onValueChange = { inputToken = it },
-                        label = { Text("GitHub Personal Access Token") },
-                        placeholder = { Text("ghp_...") },
-                        singleLine = true,
-                        visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                                Icon(
-                                    imageVector = if (tokenVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (tokenVisible) "Hide Token" else "Show Token"
+            // ---- Sync ----
+            SettingsSection(title = "Sync") {
+                SettingsNavRow(
+                    icon = Icons.Default.HealthAndSafety,
+                    title = "Sync Health",
+                    subtitle = "Review pending uploads, conflicts, trash, and current sync status.",
+                    onClick = onNavigateToSyncHealth,
+                    testTag = "sync_health_card"
+                )
+                HorizontalDivider()
+                Button(
+                    onClick = { viewModel.syncNow() },
+                    enabled = token.isNotEmpty() && !isSyncing,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("sync_button")
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Synchronizing...")
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sync Now (Push & Pull)")
+                    }
+                }
+                AnimatedVisibility(
+                    visible = syncMessage != null,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    syncMessage?.let { msg ->
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (msg.contains("failed", ignoreCase = true) || msg.contains("Error", ignoreCase = true)) {
+                                    MaterialTheme.colorScheme.errorContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = msg,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                IconButton(onClick = { viewModel.clearSyncMessage() }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
+                                }
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("github_token_input")
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = { viewModel.saveToken(inputToken.trim()) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("save_token_button")
-                    ) {
-                        Text("Save Securely")
-                    }
-
-                    if (token.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(
-                            onClick = { showClearTokenConfirm = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("clear_token_button")
-                        ) {
-                            Text("Disconnect GitHub", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToSyncHealth() }
-                        .padding(16.dp)
-                        .testTag("sync_health_card"),
-                    verticalAlignment = Alignment.CenterVertically
+                HorizontalDivider()
+                Text(
+                    text = "Repository Sync",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Sync Markdown files from a whole GitHub repository (owner/repo). Private repos require a token with the `repo` scope.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(
+                    modifier = Modifier.fillMaxWidth().testTag("repo_sync_card"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.HealthAndSafety,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Sync Health",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Review pending uploads, conflicts, trash, and current sync status.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .testTag("app_lock_card"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Fingerprint,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Column {
-                            Text(
-                                text = "Fingerprint App Lock",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = "Require fingerprint unlock when opening Octo Jotter.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = appLockEnabled,
-                        onCheckedChange = { viewModel.setAppLockEnabled(it) },
-                        modifier = Modifier.testTag("app_lock_toggle")
-                    )
-                }
-            }
-
-            Text(
-                text = "Manual Synchronization",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Button(
-                onClick = { viewModel.syncNow() },
-                enabled = token.isNotEmpty() && !isSyncing,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .testTag("sync_button")
-            ) {
-                if (isSyncing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text("Synchronizing...")
-                } else {
-                    Icon(Icons.Default.Sync, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Sync Now (Push & Pull)")
-                }
-            }
-
-            AnimatedVisibility(
-                visible = syncMessage != null,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                syncMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (msg.contains("failed", ignoreCase = true) || msg.contains("Error", ignoreCase = true)) {
-                                MaterialTheme.colorScheme.errorContainer
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            }
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = msg,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(onClick = { viewModel.clearSyncMessage() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // ---- Repository Sync (folder-based, GitHub repos) ----
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth().testTag("repo_sync_card")
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Repository Sync",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Sync Markdown files from a whole GitHub repository (owner/repo). Private repos require a token with the `repo` scope.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
                     repositories.forEach { repo ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -3684,8 +4202,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -3713,10 +4229,6 @@ fun SettingsScreen(
                             Icon(Icons.Default.Add, contentDescription = "Add repository")
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    // Discover repositories from the connected account so the user
-                    // can tap to add instead of typing owner/repo by hand.
                     OutlinedButton(
                         onClick = { viewModel.fetchAvailableRepos() },
                         enabled = token.isNotEmpty() && !isLoadingRepos,
@@ -3737,11 +4249,8 @@ fun SettingsScreen(
                             Text("Find my GitHub repositories")
                         }
                     }
-
-                    // Discovered repos not already in the sync list - tap to add.
                     val undiscovered = availableRepos.filter { it !in repositories }
                     if (undiscovered.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Tap to add:",
                             style = MaterialTheme.typography.bodySmall,
@@ -3773,129 +4282,12 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+            }
 
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToPlugins() }
-                        .padding(16.dp)
-                        .testTag("community_plugins_card"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Extension,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Community Plugins",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Browse and install themes and packs from the community.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToAiSettings() }
-                        .padding(16.dp)
-                        .testTag("ai_settings_card"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "On-device AI",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Manage the chat (LLM) and semantic-search models. Runs fully on your device.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .testTag("theme_settings_card")
-                ) {
-                    Text(
-                        text = "App Theme",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Dark mode",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Switch(
-                            checked = themeMode == "dark",
-                            onCheckedChange = { isDark ->
-                                viewModel.setThemeMode(if (isDark) "dark" else "light")
-                            },
-                            modifier = Modifier.testTag("theme_toggle")
-                        )
-                    }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .testTag("backup_settings_card")
-                ) {
-                    Text(
-                        text = "Database Backup",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+            // ---- Local storage ----
+            SettingsSection(title = "Local storage") {
+                Column(modifier = Modifier.fillMaxWidth().testTag("backup_settings_card")) {
                     Text(
                         text = "Export all notes, drafts, and tags as a JSON file, then share it to Drive, Downloads, or any app you choose.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -3912,7 +4304,6 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Export Database to JSON")
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = { viewModel.exportMarkdownArchive() },
@@ -3924,7 +4315,6 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Export Notes as Markdown ZIP")
                     }
-
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = { markdownImportLauncher.launch(arrayOf("text/markdown", "text/plain", "text/*", "application/octet-stream")) },
@@ -3936,7 +4326,6 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Import Markdown File")
                     }
-
                     lastExportedPath?.let { path ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -3973,7 +4362,6 @@ fun SettingsScreen(
                             Text("Share backup file")
                         }
                     }
-
                     exportStatus?.let { status ->
                         Spacer(modifier = Modifier.height(12.dp))
                         Card(
@@ -4022,151 +4410,68 @@ fun SettingsScreen(
                         }
                     }
                 }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .testTag("update_settings_card")
-                ) {
-                    Text(
-                        text = "Updates",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Current version ${viewModel.currentVersionName}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        modifier = Modifier
-                            .clickable {
-                                versionTaps++
-                                if (versionTaps >= 7) {
-                                    versionTaps = 0
-                                    onNavigateToDebug()
-                                }
-                            }
-                            .testTag("version_tap_target")
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    when (val status = updateStatus) {
-                        is UpdateStatus.Available -> {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudDone,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.octoStatus.syncOk,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Version ${status.latestVersion} is available",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (status.notes.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = status.notes,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                    maxLines = 6,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            val dl = downloadStatus
-                            if (status.apkUrl != null) {
-                                Button(
-                                    onClick = { viewModel.downloadAndInstallUpdate(status.apkUrl, status.latestVersion) },
-                                    enabled = dl !is DownloadStatus.Downloading && dl !is DownloadStatus.Installing,
-                                    modifier = Modifier.fillMaxWidth().testTag("download_update_button")
-                                ) {
-                                    when (dl) {
-                                        is DownloadStatus.Downloading -> {
-                                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Downloading ${dl.percent}%")
-                                        }
-                                        DownloadStatus.Installing -> Text("Opening installer...")
-                                        else -> {
-                                            Icon(Icons.Default.Download, contentDescription = null)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Download & install v${status.latestVersion}")
-                                        }
-                                    }
-                                }
-                                if (dl is DownloadStatus.Failed) {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        text = dl.message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                    TextButton(onClick = { uriHandler.openUri(status.releaseUrl) }) {
-                                        Text("Open release in browser instead")
-                                    }
-                                }
-                            } else {
-                                Button(
-                                    onClick = { uriHandler.openUri(status.releaseUrl) },
-                                    modifier = Modifier.fillMaxWidth().testTag("download_update_button")
-                                ) {
-                                    Icon(Icons.Default.Download, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("View release")
-                                }
-                            }
-                        }
-                        else -> {
-                            Button(
-                                onClick = { viewModel.checkForUpdate() },
-                                enabled = status != UpdateStatus.Checking,
-                                modifier = Modifier.fillMaxWidth().testTag("check_update_button")
-                            ) {
-                                if (status == UpdateStatus.Checking) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Checking...")
-                                } else {
-                                    Icon(Icons.Default.Refresh, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Check for updates")
-                                }
-                            }
-                            val statusLine = when (status) {
-                                UpdateStatus.UpToDate -> "You're on the latest version." to MaterialTheme.octoStatus.syncOk
-                                is UpdateStatus.Error -> status.message to MaterialTheme.colorScheme.error
-                                else -> null
-                            }
-                            statusLine?.let { (msg, tint) ->
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = msg,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = tint,
-                                    modifier = Modifier.testTag("update_status_text")
-                                )
-                            }
-                        }
-                    }
-                }
-                }
-            } // Close unified Settings Card
-            
-            Spacer(modifier = Modifier.height(16.dp))
+            }
         }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        shape = OctoShapes.card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsNavRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    testTag: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

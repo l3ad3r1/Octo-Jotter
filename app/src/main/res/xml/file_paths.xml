@@ -6,4 +6,6 @@
     <files-path name="attachments" path="attachments/" />
     <!-- Downloaded update APKs, served to the package installer. -->
     <files-path name="updates" path="updates/" />
+    <!-- Temporary photo the camera app writes to for the Scan Text (OCR) plugin. -->
+    <cache-path name="ocr_capture" path="ocr/" />
 </paths>

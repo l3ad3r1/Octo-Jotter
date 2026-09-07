@@ -1,5 +1,6 @@
 package com.l3ad3r1.octojotter.data.remote
 
+import com.l3ad3r1.octojotter.BuildConfig
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -15,8 +16,25 @@ object RetrofitClient {
         .addLast(KotlinJsonAdapterFactory())
         .build()
 
+    /**
+     * Request logging, debug builds only.
+     *
+     * `Level.BODY` logs request headers and bodies — which here means the
+     * `Authorization: Bearer <personal access token>` header and the full text
+     * of every synced note, written to logcat. That is fine on a development
+     * machine and is not something a shipped build should ever do, so release
+     * builds get `Level.NONE`. The Authorization header is redacted even in
+     * debug: nothing about diagnosing a sync problem requires seeing the token,
+     * and logs get pasted into bug reports.
+     */
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) {
+            HttpLoggingInterceptor.Level.BODY
+        } else {
+            HttpLoggingInterceptor.Level.NONE
+        }
+        redactHeader("Authorization")
+        redactHeader("Cookie")
     }
 
     private val okHttpClient = OkHttpClient.Builder()
