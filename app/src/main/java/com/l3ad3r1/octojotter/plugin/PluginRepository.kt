@@ -1,5 +1,7 @@
 package com.l3ad3r1.octojotter.plugin
 
+import android.content.res.AssetManager
+import android.util.Log
 import com.l3ad3r1.octojotter.data.local.PluginDao
 import com.l3ad3r1.octojotter.data.local.PluginEntity
 import com.squareup.moshi.Moshi
@@ -29,12 +31,25 @@ internal fun undeclaredPermissions(consented: List<String>, requested: List<Stri
 internal fun grantedPermissions(consented: List<String>, requested: List<String>): List<String> =
     requested.distinct().filter { it in consented }
 
+/** Marks a manifest bundled in the APK rather than fetched. See [PluginRepository.fetch]. */
+internal const val ASSET_URL_PREFIX = "asset:"
+
 /**
- * Installs, enables and removes community plugins. Registry + manifests are
- * plain JSON fetched over HTTPS from public GitHub raw URLs (no token needed).
- * Phase 1 stores the full manifest so plugins keep working offline.
+ * Installs, enables and removes plugins — community and built-in alike.
+ *
+ * Registry and manifests are plain JSON. A community plugin's are fetched over
+ * HTTPS from public GitHub raw URLs (no token needed); a built-in's are bundled
+ * in the APK under `assets/plugins/` and addressed with the [ASSET_URL_PREFIX]
+ * scheme, because a compiled-in capability must not stop working offline or
+ * when GitHub is unreachable. That is the *only* difference between the two —
+ * everything downstream of [fetch] is one code path.
+ *
+ * The full manifest is stored on install so plugins keep working offline.
  */
-class PluginRepository(private val pluginDao: PluginDao) {
+class PluginRepository(
+    private val pluginDao: PluginDao,
+    private val assets: AssetManager,
+) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -44,6 +59,9 @@ class PluginRepository(private val pluginDao: PluginDao) {
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val registryAdapter = moshi.adapter(RegistryIndex::class.java)
     private val manifestAdapter = moshi.adapter(PluginManifest::class.java)
+
+    /** Bundled registry, parsed once — it is a file in the APK. */
+    @Volatile private var builtinCache: List<RegistryEntry>? = null
 
     val installedPlugins: Flow<List<PluginEntity>> = pluginDao.getAllPluginsFlow()
 
@@ -59,11 +77,11 @@ class PluginRepository(private val pluginDao: PluginDao) {
     val enabledSnippetPlugins: Flow<List<PluginEntity>> =
         pluginDao.getEnabledByTypeFlow(PluginTypes.SNIPPET)
 
-    /** Fetch the community registry index. */
+    /** Fetch a registry index — the community one over HTTPS, or a bundled one. */
     suspend fun fetchRegistry(url: String = DEFAULT_REGISTRY_URL): Result<List<RegistryEntry>> =
         withContext(Dispatchers.IO) {
             try {
-                val body = httpGet(url)
+                val body = fetch(url)
                 val index = registryAdapter.fromJson(body)
                     ?: return@withContext Result.failure(IOException("Malformed plugin registry."))
                 Result.success(index.plugins)
@@ -86,7 +104,7 @@ class PluginRepository(private val pluginDao: PluginDao) {
      */
     suspend fun install(entry: RegistryEntry, appVersion: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val manifestJson = httpGet(entry.manifestUrl)
+            val manifestJson = fetch(entry.manifestUrl)
             val manifest = manifestAdapter.fromJson(manifestJson)
                 ?: return@withContext Result.failure(IOException("Malformed plugin manifest."))
             if (!meetsMinVersion(manifest.minAppVersion, appVersion)) {
@@ -148,107 +166,51 @@ class PluginRepository(private val pluginDao: PluginDao) {
      * device was already in. A fresh install where neither is true never
      * calls this with `true` — those stay in Browse until the user installs.
      */
-    suspend fun migrateExistingUsageToInstalled(githubInUse: Boolean, aiInUse: Boolean) =
+    suspend fun migrateExistingUsageToInstalled(githubInUse: Boolean, aiInUse: Boolean, appVersion: String) =
         withContext(Dispatchers.IO) {
-            if (githubInUse) installBuiltinFeature(FeaturePluginIds.GITHUB_SYNC)
-            if (aiInUse) installBuiltinFeature(FeaturePluginIds.ON_DEVICE_AI)
+            if (githubInUse) installAndEnableBuiltin(FeaturePluginIds.GITHUB_SYNC, appVersion)
+            if (aiInUse) installAndEnableBuiltin(FeaturePluginIds.ON_DEVICE_AI, appVersion)
         }
 
-    /** Local browse entries for the two built-in feature plugins — never
-     *  fetched over the network, filtered out once installed the same way a
-     *  community registry entry is (see installedById in the Browse list). */
-    fun builtinFeatureEntries(): List<RegistryEntry> = listOf(
-        RegistryEntry(
-            id = FeaturePluginIds.GITHUB_SYNC,
-            name = "GitHub Sync",
-            author = "Octo Jotter",
-            description = "Sync notes to a private Gist or a whole GitHub repository.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.ON_DEVICE_AI,
-            name = "On-device AI",
-            author = "Octo Jotter",
-            description = "Chat and semantic search over your notes, running entirely on your phone.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.DAILY_NOTES,
-            name = "Daily Notes",
-            author = "Octo Jotter",
-            description = "One tap opens (or creates) today's note.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.TEMPLATES,
-            name = "Templates",
-            author = "Octo Jotter",
-            description = "Reusable note templates with {{date}}, {{time}}, and {{title}} variables.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.TASK_REMINDERS,
-            name = "Task Reminders",
-            author = "Octo Jotter",
-            description = "Set a reminder on any note and get a notification when it's due.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.GRAPH_VIEW,
-            name = "Graph View",
-            author = "Octo Jotter",
-            description = "Visualize how your notes connect through [[wikilinks]].",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.OCR_SCAN,
-            name = "Scan Text (OCR)",
-            author = "Octo Jotter",
-            description = "Capture a photo and pull its text into a note — runs on-device.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-        RegistryEntry(
-            id = FeaturePluginIds.COMMAND_PALETTE,
-            name = "Command Palette",
-            author = "Octo Jotter",
-            description = "A quick-action search for jumping to notes and running commands.",
-            type = PluginTypes.FEATURE,
-            version = "1.0",
-            manifestUrl = "",
-        ),
-    )
+    /**
+     * Browse entries for the plugins the app ships compiled in.
+     *
+     * These used to be a hardcoded `List<RegistryEntry>` right here, and
+     * installing one took its own path that skipped the manifest, the version
+     * check and the consent dialog — so a "feature plugin" was a plugin in name
+     * only. They are now described by `assets/plugins/registry.json` in exactly
+     * the schema the community registry uses, and install through
+     * [install] like anything else.
+     *
+     * Read once and cached: it is a bundled file, it cannot change at runtime,
+     * and Browse asks for it on every open.
+     */
+    suspend fun builtinFeatureEntries(): List<RegistryEntry> {
+        builtinCache?.let { return it }
+        return fetchRegistry(BUILTIN_REGISTRY_URL)
+            .getOrElse {
+                // A missing or malformed bundled registry is a packaging bug, not
+                // a runtime condition. Surfacing it as an empty Browse list is
+                // more useful than crashing on a screen the user just opened.
+                Log.e(TAG, "Bundled plugin registry unreadable", it)
+                emptyList()
+            }
+            .also { builtinCache = it }
+    }
 
-    /** Install a built-in feature plugin by id — no network, no manifest fetch. */
-    suspend fun installBuiltinFeature(id: String) = withContext(Dispatchers.IO) {
-        val entry = builtinFeatureEntries().firstOrNull { it.id == id } ?: return@withContext
-        pluginDao.upsert(
-            PluginEntity(
-                id = entry.id,
-                name = entry.name,
-                version = entry.version ?: "1.0",
-                type = PluginTypes.FEATURE,
-                author = entry.author,
-                description = entry.description,
-                enabled = true,
-                sourceUrl = null,
-                payloadJson = "{}",
-                permissions = emptyList()
-            )
-        )
+    /**
+     * Install a built-in and switch it on, for the upgrade path only.
+     *
+     * Ordinary installs land disabled, like every other plugin — the user
+     * enables them. This exists solely so a device already using GitHub sync or
+     * on-device AI before the plugin system gated them keeps working; see
+     * [migrateExistingUsageToInstalled].
+     */
+    private suspend fun installAndEnableBuiltin(id: String, appVersion: String) {
+        val entry = builtinFeatureEntries().firstOrNull { it.id == id } ?: return
+        install(entry, appVersion).onSuccess {
+            pluginDao.setEnabled(id, true)
+        }
     }
 
     /**
@@ -277,6 +239,27 @@ class PluginRepository(private val pluginDao: PluginDao) {
         return true
     }
 
+    /**
+     * Read a registry or manifest, wherever it lives.
+     *
+     * This is the single seam between a built-in and a community plugin. An
+     * `asset:` URL resolves inside the APK, so a compiled-in capability
+     * installs with no network at all; anything else goes over HTTPS. Both
+     * return the same JSON to the same parser, which is what lets one install
+     * path serve both.
+     */
+    private fun fetch(url: String): String =
+        if (url.startsWith(ASSET_URL_PREFIX)) {
+            val path = url.removePrefix(ASSET_URL_PREFIX)
+            try {
+                assets.open(path).use { it.readBytes().toString(Charsets.UTF_8) }
+            } catch (e: IOException) {
+                throw IOException("Bundled plugin asset missing: $path", e)
+            }
+        } else {
+            httpGet(url)
+        }
+
     private fun httpGet(url: String): String {
         val request = Request.Builder().url(url).header("Accept", "application/json").build()
         client.newCall(request).execute().use { resp ->
@@ -286,6 +269,11 @@ class PluginRepository(private val pluginDao: PluginDao) {
     }
 
     companion object {
+        private const val TAG = "PluginRepository"
+
+        /** The registry of compiled-in plugins, bundled in the APK. */
+        const val BUILTIN_REGISTRY_URL = ASSET_URL_PREFIX + "plugins/registry.json"
+
         const val DEFAULT_REGISTRY_URL =
             "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/registry.json"
     }

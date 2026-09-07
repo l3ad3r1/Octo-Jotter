@@ -1,0 +1,13 @@
+{
+  "_comment": "Built-in: the code is compiled into the app; this manifest exists so the feature installs, enables and uninstalls through the same path as a community plugin. permissions are DISCLOSURE, shown in the install dialog — unlike a script plugin there is no sandbox enforcing them, because this code is part of the app. Keep them truthful.",
+  "id": "command-palette",
+  "name": "Command Palette",
+  "version": "1.0",
+  "author": "Octo Jotter",
+  "description": "A quick-action search for jumping to notes and running commands.",
+  "type": "feature",
+  "permissions": [
+    "notes:read"
+  ],
+  "capability": "Reads note titles to offer them as jump targets."
+}

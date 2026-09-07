@@ -1,0 +1,13 @@
+{
+  "_comment": "Built-in: the code is compiled into the app; this manifest exists so the feature installs, enables and uninstalls through the same path as a community plugin. permissions are DISCLOSURE, shown in the install dialog — unlike a script plugin there is no sandbox enforcing them, because this code is part of the app. Keep them truthful.",
+  "id": "ocr-scan",
+  "name": "Scan Text (OCR)",
+  "version": "1.0",
+  "author": "Octo Jotter",
+  "description": "Capture a photo and pull its text into a note — runs on-device.",
+  "type": "feature",
+  "permissions": [
+    "notes:write"
+  ],
+  "capability": "Writes recognised text into the open note. Also needs the CAMERA runtime permission."
+}

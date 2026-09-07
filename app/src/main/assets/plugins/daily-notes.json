@@ -1,0 +1,14 @@
+{
+  "_comment": "Built-in: the code is compiled into the app; this manifest exists so the feature installs, enables and uninstalls through the same path as a community plugin. permissions are DISCLOSURE, shown in the install dialog — unlike a script plugin there is no sandbox enforcing them, because this code is part of the app. Keep them truthful.",
+  "id": "daily-notes",
+  "name": "Daily Notes",
+  "version": "1.0",
+  "author": "Octo Jotter",
+  "description": "One tap opens (or creates) today's note.",
+  "type": "feature",
+  "permissions": [
+    "notes:read",
+    "notes:write"
+  ],
+  "capability": "Looks up today's note by title and creates it when absent."
+}

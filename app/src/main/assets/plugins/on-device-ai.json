@@ -1,0 +1,13 @@
+{
+  "_comment": "Built-in: the code is compiled into the app; this manifest exists so the feature installs, enables and uninstalls through the same path as a community plugin. permissions are DISCLOSURE, shown in the install dialog — unlike a script plugin there is no sandbox enforcing them, because this code is part of the app. Keep them truthful.",
+  "id": "on-device-ai",
+  "name": "On-device AI",
+  "version": "1.0",
+  "author": "Octo Jotter",
+  "description": "Chat and semantic search over your notes, running entirely on your phone.",
+  "type": "feature",
+  "permissions": [
+    "notes:read"
+  ],
+  "capability": "Indexes the full text of every unlocked note to build the local embedding index."
+}

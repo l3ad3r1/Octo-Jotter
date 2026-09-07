@@ -1,0 +1,97 @@
+{
+  "_comment": [
+    "Registry of the plugins Octo Jotter ships compiled in.",
+    "Same schema as the community registry at plugins/registry.json, and read",
+    "through the same RegistryIndex adapter — the only difference is that",
+    "manifestUrl uses the asset: scheme, so these resolve from inside the APK",
+    "and need no network. A built-in must work offline and must not depend on",
+    "GitHub being reachable.",
+    "",
+    "permissions here MUST match the manifest each entry points at. The install",
+    "path refuses a plugin whose manifest asks for more than its listing",
+    "declared (see undeclaredPermissions), and that check applies to these too.",
+    "BuiltinPluginRegistryTest pins the agreement."
+  ],
+  "plugins": [
+    {
+      "id": "github-sync",
+      "name": "GitHub Sync",
+      "author": "Octo Jotter",
+      "description": "Sync notes to a private Gist or a whole GitHub repository.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read", "notes:write"],
+      "manifestUrl": "asset:plugins/github-sync.json"
+    },
+    {
+      "id": "on-device-ai",
+      "name": "On-device AI",
+      "author": "Octo Jotter",
+      "description": "Chat and semantic search over your notes, running entirely on your phone.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "asset:plugins/on-device-ai.json"
+    },
+    {
+      "id": "daily-notes",
+      "name": "Daily Notes",
+      "author": "Octo Jotter",
+      "description": "One tap opens (or creates) today's note.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read", "notes:write"],
+      "manifestUrl": "asset:plugins/daily-notes.json"
+    },
+    {
+      "id": "templates",
+      "name": "Templates",
+      "author": "Octo Jotter",
+      "description": "Reusable note templates with {{date}}, {{time}}, and {{title}} variables.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:write"],
+      "manifestUrl": "asset:plugins/templates.json"
+    },
+    {
+      "id": "task-reminders",
+      "name": "Task Reminders",
+      "author": "Octo Jotter",
+      "description": "Set a reminder on any note and get a notification when it's due.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "asset:plugins/task-reminders.json"
+    },
+    {
+      "id": "graph-view",
+      "name": "Graph View",
+      "author": "Octo Jotter",
+      "description": "Visualize how your notes connect through [[wikilinks]].",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "asset:plugins/graph-view.json"
+    },
+    {
+      "id": "ocr-scan",
+      "name": "Scan Text (OCR)",
+      "author": "Octo Jotter",
+      "description": "Capture a photo and pull its text into a note — runs on-device.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:write"],
+      "manifestUrl": "asset:plugins/ocr-scan.json"
+    },
+    {
+      "id": "command-palette",
+      "name": "Command Palette",
+      "author": "Octo Jotter",
+      "description": "A quick-action search for jumping to notes and running commands.",
+      "type": "feature",
+      "version": "1.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "asset:plugins/command-palette.json"
+    }
+  ]
+}

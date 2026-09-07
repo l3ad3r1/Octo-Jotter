@@ -253,7 +253,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- Community plugins ----
     private val pluginRepository =
-        com.l3ad3r1.octojotter.plugin.PluginRepository(AppDatabase.getDatabase(application).pluginDao())
+        com.l3ad3r1.octojotter.plugin.PluginRepository(
+            AppDatabase.getDatabase(application).pluginDao(),
+            application.assets,
+        )
 
     val installedPlugins: StateFlow<List<com.l3ad3r1.octojotter.data.local.PluginEntity>> =
         pluginRepository.installedPlugins
@@ -279,7 +282,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
             val aiInUse = aiContainer.modelManager.let { mm ->
                 mm.isEmbeddingReady() || ModelCatalog.CHAT_MODELS.any { mm.isChatModelPresent(it) }
             }
-            pluginRepository.migrateExistingUsageToInstalled(githubInUse, aiInUse)
+            pluginRepository.migrateExistingUsageToInstalled(githubInUse, aiInUse, currentVersionName)
         }
     }
 
@@ -327,7 +330,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     // whatever's in installedPlugins by id, so one installed here just
     // disappears from Browse the same way a community plugin would.
     private val _registryPlugins =
-        MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>>(pluginRepository.builtinFeatureEntries())
+        MutableStateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>>(emptyList())
     val registryPlugins: StateFlow<List<com.l3ad3r1.octojotter.plugin.RegistryEntry>> = _registryPlugins.asStateFlow()
 
     private val _isLoadingPlugins = MutableStateFlow(false)
@@ -351,24 +354,26 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshPluginRegistry() {
         viewModelScope.launch {
             _isLoadingPlugins.value = true
+            // Built-ins are bundled in the APK, so they list even with no
+            // network; only the community half can fail.
+            val builtins = pluginRepository.builtinFeatureEntries()
+            _registryPlugins.value = builtins
             val result = pluginRepository.fetchRegistry()
             _isLoadingPlugins.value = false
             result
-                .onSuccess { _registryPlugins.value = pluginRepository.builtinFeatureEntries() + it }
-                .onFailure { _pluginMessage.value = "Couldn't load plugins: ${it.message}" }
+                .onSuccess { _registryPlugins.value = builtins + it }
+                .onFailure { _pluginMessage.value = "Couldn't load community plugins: ${it.message}" }
         }
     }
 
     fun installPlugin(entry: com.l3ad3r1.octojotter.plugin.RegistryEntry) {
         viewModelScope.launch {
-            if (entry.type == com.l3ad3r1.octojotter.plugin.PluginTypes.FEATURE) {
-                pluginRepository.installBuiltinFeature(entry.id)
-                _pluginMessage.value = "Installed ${entry.name}"
-            } else {
-                pluginRepository.install(entry, currentVersionName)
-                    .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
-                    .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
-            }
+            // No branch on type: a built-in installs through the same manifest
+            // fetch, version check and permission reconciliation as a community
+            // plugin. Only where its manifest is read from differs.
+            pluginRepository.install(entry, currentVersionName)
+                .onSuccess { _pluginMessage.value = "Installed ${entry.name}" }
+                .onFailure { _pluginMessage.value = "Install failed: ${it.message}" }
         }
     }
 

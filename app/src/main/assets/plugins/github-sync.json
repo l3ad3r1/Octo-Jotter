@@ -1,0 +1,14 @@
+{
+  "_comment": "Built-in: the code is compiled into the app; this manifest exists so the feature installs, enables and uninstalls through the same path as a community plugin. permissions are DISCLOSURE, shown in the install dialog — unlike a script plugin there is no sandbox enforcing them, because this code is part of the app. Keep them truthful.",
+  "id": "github-sync",
+  "name": "GitHub Sync",
+  "version": "1.0",
+  "author": "Octo Jotter",
+  "description": "Sync notes to a private Gist or a whole GitHub repository.",
+  "type": "feature",
+  "permissions": [
+    "notes:read",
+    "notes:write"
+  ],
+  "capability": "Reads every note to push it, and writes notes pulled from GitHub."
+}
