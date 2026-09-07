@@ -48,7 +48,7 @@ import com.l3ad3r1.octojotter.ui.theme.MyApplicationTheme
 /**
  * On-device RAG chat over the user's notes (Phase 2 of docs/ON-DEVICE-AI.md).
  * Retrieval + generation run entirely on-device; requires an arm64 device with
- * enough RAM. The chat model downloads on first use (or is reused from Hermes).
+ * enough RAM. The chat model downloads on first use.
  */
 class AiChatActivity : ComponentActivity() {
     private val viewModel: AiChatViewModel by viewModels()

@@ -77,10 +77,13 @@ data class ReleaseResponse(
 )
 
 interface GithubApiService {
+    // Paged: a user with more than one page of Gists used to have everything
+    // past the first 100 silently invisible to the app.
     @GET("gists")
     suspend fun getGists(
         @Header("Authorization") token: String,
-        @Query("per_page") perPage: Int = 100
+        @Query("per_page") perPage: Int = 100,
+        @Query("page") page: Int = 1
     ): Response<List<GistResponse>>
 
     @GET("gists/{gist_id}")

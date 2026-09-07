@@ -1,11 +1,11 @@
 package com.l3ad3r1.octojotter.ai.model
 
+import java.util.Locale
+
 /**
  * One downloadable file (a model or a tokenizer vocab).
  *
- * @param fileName on-disk identity — used to detect "already downloaded" and,
- *                 for chat models, kept byte-identical to Hermes so its download
- *                 is reused.
+ * @param fileName on-disk identity — used to detect "already downloaded".
  * @param url      direct HuggingFace `resolve` URL (302s to the CDN).
  * @param sizeBytes verified download size; drives the free-space pre-check and
  *                 the "already downloaded" check. Null = size unknown (fall back
@@ -20,11 +20,12 @@ data class DownloadableFile(
         get() {
             val bytes = sizeBytes ?: return "unknown size"
             val mb = bytes / (1024.0 * 1024.0)
-            return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+            return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024.0)
+            else String.format(Locale.US, "%.0f MB", mb)
         }
 }
 
-/** A GGUF chat model (llama.cpp). Filenames mirror Hermes so downloads are shared. */
+/** A GGUF chat model (llama.cpp). */
 data class ChatModel(
     val id: String,
     val displayName: String,
@@ -46,20 +47,20 @@ data class EmbeddingModel(
         get() {
             val bytes = totalBytes ?: return "unknown size"
             val mb = bytes / (1024.0 * 1024.0)
-            return if (mb >= 1024) String.format("%.1f GB", mb / 1024.0) else String.format("%.0f MB", mb)
+            return if (mb >= 1024) String.format(Locale.US, "%.1f GB", mb / 1024.0)
+            else String.format(Locale.US, "%.0f MB", mb)
         }
 }
 
 /**
  * The registry of downloadable models.
  *
- * Chat models are copied verbatim from Hermes `ModelCatalog` (same ids, file
- * names, URLs and sizes) so that a model already downloaded in Hermes' shared
- * `AI Models` folder is detected as present here — no re-download. All are
- * bartowski Q4_K_M quantisations. Keep this list in sync with Hermes.
+ * Chat models are all bartowski Q4_K_M quantisations. Their ids and filenames
+ * originally mirrored the sibling Hermes app so downloads could be shared; that
+ * sharing is gone (see [ModelStorage]) but the names are kept so an existing
+ * install's downloads are still recognised.
  *
- * The embedding model is Octo-specific (Hermes has none). Sizes were verified
- * live against HuggingFace before shipping.
+ * Sizes were verified live against HuggingFace before shipping.
  */
 object ModelCatalog {
 
@@ -102,7 +103,7 @@ object ModelCatalog {
         ),
     )
 
-    /** Default chat model when the user has never picked one (matches Hermes). */
+    /** Default chat model when the user has never picked one. */
     val DEFAULT_CHAT: ChatModel = CHAT_MODELS.first()
 
     fun chatById(id: String): ChatModel = CHAT_MODELS.firstOrNull { it.id == id } ?: DEFAULT_CHAT

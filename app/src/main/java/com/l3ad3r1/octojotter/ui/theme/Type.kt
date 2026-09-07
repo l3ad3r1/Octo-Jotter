@@ -56,3 +56,42 @@ val Typography =
     labelSmall =
       TextStyle(fontFamily = SansFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 16.sp, letterSpacing = 0.5.sp),
   )
+
+/**
+ * The Settings → Appearance → Font choice, applied. [family] replaces every
+ * role's font uniformly — Display down to Label — rather than only the sans
+ * slots, so picking "Serif" (say) reads as a real, distinct choice instead of
+ * leaving half the app in whatever it already was. [scale] multiplies each
+ * role's own size and line height, keeping the scale's proportions intact
+ * (Display still reads larger than Label at any scale) rather than setting
+ * one absolute size for every role.
+ */
+fun Typography.withAppFont(family: FontFamily, scale: Float): Typography =
+  mapRoles { copy(fontFamily = family, fontSize = fontSize * scale, lineHeight = lineHeight * scale) }
+
+/**
+ * Font size only, with no explicit choice made yet — the built-in serif
+ * headline / sans body pairing stays exactly as designed, just bigger or
+ * smaller, rather than [withAppFont]'s single-family override flattening it
+ * the moment font *size* alone is touched.
+ */
+fun Typography.withScale(scale: Float): Typography =
+  mapRoles { copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale) }
+
+private inline fun Typography.mapRoles(transform: TextStyle.() -> TextStyle): Typography = copy(
+  displayLarge = displayLarge.transform(),
+  displayMedium = displayMedium.transform(),
+  displaySmall = displaySmall.transform(),
+  headlineLarge = headlineLarge.transform(),
+  headlineMedium = headlineMedium.transform(),
+  headlineSmall = headlineSmall.transform(),
+  titleLarge = titleLarge.transform(),
+  titleMedium = titleMedium.transform(),
+  titleSmall = titleSmall.transform(),
+  bodyLarge = bodyLarge.transform(),
+  bodyMedium = bodyMedium.transform(),
+  bodySmall = bodySmall.transform(),
+  labelLarge = labelLarge.transform(),
+  labelMedium = labelMedium.transform(),
+  labelSmall = labelSmall.transform(),
+)

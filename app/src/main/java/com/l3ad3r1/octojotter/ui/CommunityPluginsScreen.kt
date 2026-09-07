@@ -14,11 +14,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -218,8 +226,18 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun pluginIcon(type: String) =
-    if (type == PluginTypes.THEME) Icons.Default.Palette else Icons.Default.Extension
+private fun pluginIcon(type: String, id: String? = null) = when {
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.GITHUB_SYNC -> Icons.Default.Cloud
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.ON_DEVICE_AI -> Icons.Default.AutoAwesome
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.DAILY_NOTES -> Icons.Default.CalendarToday
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.TEMPLATES -> Icons.Default.Description
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.TASK_REMINDERS -> Icons.Default.NotificationsActive
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.GRAPH_VIEW -> Icons.Default.Hub
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.OCR_SCAN -> Icons.Default.DocumentScanner
+    id == com.l3ad3r1.octojotter.plugin.FeaturePluginIds.COMMAND_PALETTE -> Icons.Default.Search
+    type == PluginTypes.THEME -> Icons.Default.Palette
+    else -> Icons.Default.Extension
+}
 
 @Composable
 private fun InstalledPluginRow(
@@ -235,12 +253,15 @@ private fun InstalledPluginRow(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(pluginIcon(plugin.type), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(pluginIcon(plugin.type, plugin.id), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(plugin.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    "${plugin.type} · v${plugin.version}" + (plugin.author?.let { " · $it" } ?: ""),
+                    // "built-in" reads clearer than "feature" for something
+                    // that ships with the app rather than being downloaded.
+                    (if (plugin.type == PluginTypes.FEATURE) "built-in" else plugin.type) +
+                        " · v${plugin.version}" + (plugin.author?.let { " · $it" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -273,7 +294,7 @@ private fun RegistryPluginRow(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(pluginIcon(entry.type), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Icon(pluginIcon(entry.type, entry.id), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(entry.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

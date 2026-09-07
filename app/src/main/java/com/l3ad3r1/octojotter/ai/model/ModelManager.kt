@@ -12,8 +12,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
 
 /**
- * Downloads model files on first use and reuses any already present — including
- * files a sibling app (Hermes) downloaded into the shared `AI Models` folder.
+ * Downloads model files on first use and reuses any already present.
  *
  * Downloads are resumable (HTTP Range), streamed to a `.part` file that is
  * size-verified and only then renamed into place, so a crash mid-download never
@@ -45,15 +44,20 @@ class ModelManager(
     fun isPresent(file: DownloadableFile, dir: File): Boolean =
         isFilePresent(File(dir, file.fileName), file.sizeBytes)
 
-    /** Is the whole embedding bundle (model + vocab) available? */
-    fun isEmbeddingReady(model: EmbeddingModel = ModelCatalog.EMBEDDING): Boolean {
-        val dir = storage.embeddingDir(model.id)
-        return isPresent(model.model, dir) && isPresent(model.vocab, dir)
-    }
+    /**
+     * Is the whole embedding bundle (model + vocab) available? Checks the
+     * app-private dir first, then — when All Files Access is granted — the
+     * public "AI Models" folder, so a bundle placed there by hand still
+     * counts as ready instead of prompting for a redundant re-download.
+     */
+    fun isEmbeddingReady(model: EmbeddingModel = ModelCatalog.EMBEDDING): Boolean =
+        storage.embeddingSearchDirs(model.id).any { dir ->
+            isPresent(model.model, dir) && isPresent(model.vocab, dir)
+        }
 
-    /** Is a chat GGUF present (possibly downloaded by Hermes)? */
+    /** Is a chat GGUF present, in either the private or (if granted) public models folder? */
     fun isChatModelPresent(model: ChatModel): Boolean =
-        isPresent(model.file, storage.chatModelsDir())
+        storage.chatSearchDirs().any { dir -> isPresent(model.file, dir) }
 
     /** Download the embedding bundle (model + vocab), reporting combined progress. */
     suspend fun downloadEmbeddingModel(
@@ -75,7 +79,7 @@ class ModelManager(
         return Result.Success(File(dir, model.model.fileName))
     }
 
-    /** Download a chat GGUF into the shared models dir (Hermes-compatible). */
+    /** Download a chat GGUF into the app's models dir. */
     suspend fun downloadChatModel(
         model: ChatModel,
         onProgress: (Progress) -> Unit = {},

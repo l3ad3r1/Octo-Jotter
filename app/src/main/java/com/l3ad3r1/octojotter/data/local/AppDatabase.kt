@@ -8,12 +8,13 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class, NoteEmbeddingEntity::class], version = 11, exportSchema = false)
+@Database(entities = [NoteEntity::class, DraftEntity::class, TagEntity::class, NoteTagCrossRef::class, PluginEntity::class, NoteEmbeddingEntity::class, TemplateEntity::class], version = 13, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun pluginDao(): PluginDao
     abstract fun noteEmbeddingDao(): NoteEmbeddingDao
+    abstract fun templateDao(): TemplateDao
 
     companion object {
         @Volatile
@@ -100,6 +101,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // v11 -> v12: color-coded notes, Daily Notes, note-level reminders
+        // (Task Reminders plugin), and the Templates plugin's own table.
+        // Additive & nullable/defaulted, so every existing note is unaffected.
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN color TEXT")
+                db.execSQL("ALTER TABLE notes ADD COLUMN isDailyNote INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE notes ADD COLUMN reminderAt INTEGER")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS templates (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        // v12 -> v13: remember which filename a note occupies inside its Gist,
+        // so a rename can be sent as a rename (old key + new `filename`) rather
+        // than silently adding a second file. Additive & nullable; existing
+        // notes back-fill on their next pull.
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE notes ADD COLUMN remoteFilename TEXT")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -107,8 +139,23 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "gist_notes_database"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .addMigrations(
+                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+                        MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+                    )
+                    // Only the pre-v6 schemas may be dropped. They shipped before
+                    // schemas were exported, so there is nothing to write a real
+                    // migration against.
+                    //
+                    // Deliberately NOT a blanket fallbackToDestructiveMigration:
+                    // that quietly deleted every note whenever a migration was
+                    // missing, including one forgotten during a future schema
+                    // bump. Room now throws instead, which fails in development
+                    // rather than on someone's phone.
+                    .fallbackToDestructiveMigrationFrom(
+                        dropAllTables = true,
+                        1, 2, 3, 4, 5,
+                    )
                     .build()
                 INSTANCE = instance
                 instance

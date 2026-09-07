@@ -22,6 +22,13 @@ data class NoteEntity(
     val path: String? = null,
     val sha: String? = null,
     val deletedAt: Long? = null,
+    // Set when the user empties the Trash: this note is queued for permanent
+    // deletion *including* its remote copy. Being in the Trash alone never sets
+    // it — trashing stays local and reversible until the trash is emptied.
+    // NoteRepository.processPendingRemoteDeletes() drains the queue and hard-
+    // deletes each row once its Gist/repo file is actually gone, so a delete
+    // made offline still reaches GitHub on the next sync instead of the note
+    // reappearing on the next pull.
     val pendingRemoteDelete: Boolean = false,
     val locked: Boolean = false,
     val encrypted: Boolean = false,
@@ -30,7 +37,25 @@ data class NoteEntity(
     val lastSyncedContentHash: String? = null,
     val conflictState: String? = null,
     val conflictedRemoteContent: String? = null,
-    val conflictedRemoteModifiedAt: Long? = null
+    val conflictedRemoteModifiedAt: Long? = null,
+    // --- v12 additions ---
+    // One of NoteColor's ids (see ui/NoteColor.kt), or null for the default
+    // surface color. A Google Keep-style at-a-glance label, purely visual.
+    val color: String? = null,
+    // Set only on the one note-per-date created by the Daily Notes plugin, so
+    // "today's note" can be found without guessing at a title format.
+    val isDailyNote: Boolean = false,
+    // Epoch millis for an optional note-level reminder (Task Reminders
+    // plugin). Null = no reminder scheduled.
+    val reminderAt: Long? = null,
+    // --- v13 addition ---
+    // The filename this note currently occupies inside its Gist. The Gist API
+    // renames a file only when the request is keyed by its *old* filename with
+    // a new `filename` value; keying by the new name silently adds a second
+    // file instead, and the next pull can then restore the stale one. Knowing
+    // the remote name is what makes a rename a rename. Null for repo-backed
+    // notes (they use `path`) and for notes not yet pushed.
+    val remoteFilename: String? = null
 ) {
     val folderPath: List<String>
         get() = folder

@@ -1,68 +1,89 @@
 package com.l3ad3r1.octojotter.ai.model
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.provider.Settings
+import com.l3ad3r1.octojotter.BuildConfig
 import java.io.File
 
 /**
- * Resolves where on-device model files live, deliberately sharing Hermes Agent's
- * layout so a model downloaded by either app is reused by the other.
+ * Resolves where on-device model files live.
  *
- * Hermes stores GGUF chat models in the public folder
- * `<external-storage>/AI Models/` (see Hermes `ModelCatalog.DEFAULT_DIR_NAME`).
- * When Octo Jotter has All-Files-Access, it points at the *same* folder and the
- * *same* filenames, so a Hermes download is detected as already-present — no
- * second multi-GB download.
+ * Downloads always land in Octo Jotter's own external files dir
+ * (`Android/data/<pkg>/files/AI Models`), which needs no storage permission —
+ * that never changes, regardless of what's below.
  *
- * Without that permission we fall back to Octo's own external files dir
- * (`Android/data/<pkg>/files/AI Models`), which needs no permission but is
- * app-private and therefore NOT shared with Hermes.
+ * Detecting — and loading — an *already-present* model additionally checks
+ * the public `<external-storage>/AI Models/` folder, where a file manager or
+ * the sibling Hermes app's older convention would have put one, but only on
+ * the `github` flavour and only once the user has granted All Files Access.
+ * Play restricts `MANAGE_EXTERNAL_STORAGE` to a short list of qualifying use
+ * cases that this isn't part of, so the `play` flavour never declares the
+ * permission and [hasAllFilesAccess] is unconditionally false there.
  */
 class ModelStorage(private val context: Context) {
 
-    /** Hermes-compatible shared root: `<external-storage>/AI Models`. */
-    fun sharedRoot(): File = File(Environment.getExternalStorageDirectory(), SHARED_DIR_NAME)
+    /** Root for all model files — app-private, no permission required. Downloads always go here. */
+    fun modelsRoot(): File =
+        File(context.getExternalFilesDir(null) ?: context.filesDir, MODELS_DIR_NAME)
 
-    /** App-private fallback that needs no storage permission. */
-    fun privateRoot(): File =
-        File(context.getExternalFilesDir(null) ?: context.filesDir, SHARED_DIR_NAME)
+    /** Directory GGUF chat models download into — always app-private. */
+    fun chatModelsDir(): File = modelsRoot().apply { mkdirs() }
 
-    /** True when we can read/write arbitrary shared storage (All-Files-Access). */
-    fun hasSharedAccess(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
+    /** Directory an embedding bundle (model + vocab) downloads into — always app-private. */
+    fun embeddingDir(id: String): File = File(chatModelsDir(), "embeddings/$id").apply { mkdirs() }
 
-    /** True once we are actually using the shared (Hermes) location. */
-    val usingSharedStorage: Boolean get() = hasSharedAccess()
-
-    /** Directory GGUF chat models live in — the Hermes folder when shared. */
-    fun chatModelsDir(): File =
-        (if (hasSharedAccess()) sharedRoot() else privateRoot()).apply { mkdirs() }
-
-    /** Directory for an embedding model bundle (model + vocab), also shareable. */
-    fun embeddingDir(id: String): File =
-        File(chatModelsDir(), "embeddings/$id").apply { mkdirs() }
-
-    /** Full path a chat model file resolves to (Hermes-identical filename). */
+    /** The app-private path a chat model file downloads to. */
     fun chatModelFile(fileName: String): File = File(chatModelsDir(), fileName)
+
+    /** The public shared folder — readable only with All Files Access. */
+    fun publicModelsRoot(): File = File(Environment.getExternalStorageDirectory(), MODELS_DIR_NAME)
+
+    /** Public shared embedding bundle dir, mirroring [embeddingDir]'s layout. */
+    fun publicEmbeddingDir(id: String): File = File(publicModelsRoot(), "embeddings/$id")
+
+    /** True if this flavour can ask for, and has been granted, All Files Access. */
+    fun hasAllFilesAccess(): Boolean =
+        BuildConfig.ALL_FILES_ACCESS_ENABLED &&
+            (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager())
+
+    /** Every directory worth checking for an already-present chat model, app-private first. */
+    fun chatSearchDirs(): List<File> =
+        listOfNotNull(chatModelsDir(), publicModelsRoot().takeIf { hasAllFilesAccess() })
+
+    /** Every directory worth checking for an already-present embedding bundle. */
+    fun embeddingSearchDirs(id: String): List<File> =
+        listOfNotNull(embeddingDir(id), publicEmbeddingDir(id).takeIf { hasAllFilesAccess() })
+
+    /**
+     * Where to actually load a chat GGUF from — the first of [chatSearchDirs]
+     * that has it, so a model sitting in the public folder loads exactly like
+     * one this app downloaded itself. Falls back to the app-private path
+     * (even if nothing is there yet) so a fresh download still has somewhere
+     * to land.
+     */
+    fun resolvedChatModelFile(fileName: String): File {
+        for (dir in chatSearchDirs()) {
+            val candidate = File(dir, fileName)
+            if (candidate.isFile) return candidate
+        }
+        return chatModelFile(fileName)
+    }
+
+    /** Same resolution as [resolvedChatModelFile], for the embedding bundle's directory. */
+    fun resolvedEmbeddingDir(id: String, requiredFileNames: List<String>): File {
+        for (dir in embeddingSearchDirs(id)) {
+            if (requiredFileNames.all { File(dir, it).isFile }) return dir
+        }
+        return embeddingDir(id)
+    }
 
     /** Usable free bytes on the filesystem backing [dir]. */
     fun usableSpaceBytes(dir: File): Long =
         runCatching { (dir.takeIf { it.exists() } ?: dir.parentFile)?.usableSpace ?: 0L }.getOrDefault(0L)
 
     companion object {
-        /** Matches Hermes `ModelCatalog.DEFAULT_DIR_NAME`. Do not rename — it is the
-         *  cross-app contract that makes model sharing work. */
-        const val SHARED_DIR_NAME = "AI Models"
-
-        /** Intent that opens the system "All files access" grant screen for this app. */
-        fun allFilesAccessIntent(context: Context): Intent =
-            Intent(
-                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                Uri.parse("package:${context.packageName}"),
-            )
+        /** Folder name under the app's external files dir (and, when reachable, shared storage). */
+        const val MODELS_DIR_NAME = "AI Models"
     }
 }

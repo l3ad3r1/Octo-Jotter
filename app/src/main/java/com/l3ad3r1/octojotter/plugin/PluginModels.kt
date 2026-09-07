@@ -72,6 +72,24 @@ object PluginTypes {
     const val THEME = "theme"
     const val SCRIPT = "script"
     const val SNIPPET = "snippet"
+    // A capability the app ships compiled-in — GitHub Sync, On-device AI —
+    // exposed through the same install/enable/remove lifecycle as a community
+    // plugin. Unlike theme/script/snippet, its manifest is never fetched over
+    // the network; PluginRepository seeds it locally on first run.
+    const val FEATURE = "feature"
+}
+
+/** The built-in feature plugins' fixed ids — referenced wherever a screen needs
+ *  to check "is this capability enabled" without going through the registry. */
+object FeaturePluginIds {
+    const val GITHUB_SYNC = "github-sync"
+    const val ON_DEVICE_AI = "on-device-ai"
+    const val DAILY_NOTES = "daily-notes"
+    const val TEMPLATES = "templates"
+    const val TASK_REMINDERS = "task-reminders"
+    const val GRAPH_VIEW = "graph-view"
+    const val OCR_SCAN = "ocr-scan"
+    const val COMMAND_PALETTE = "command-palette"
 }
 
 /** Known plugin permissions and their human-readable descriptions. */

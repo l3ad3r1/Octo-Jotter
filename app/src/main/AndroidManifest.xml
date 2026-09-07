@@ -5,22 +5,21 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
-    <!-- Needed so the in-app updater can launch the APK installer. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Task Reminders plugin: fires a local notification when a note's
+         reminder is due. Runtime-requested (Android 13+); the plugin's
+         reminder UI is simply unavailable if the user declines. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scan Text (OCR) plugin: captures a photo via the system camera app
+         (ACTION_IMAGE_CAPTURE) to run on-device text recognition on. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- On-device AI (optional): read/write the shared "AI Models" folder so a
-         model downloaded here or by the sibling Hermes app is reused, avoiding a
-         second multi-GB download. All-Files-Access is used only for that folder.
-         Octo Jotter is distributed via GitHub release APKs (not the Play Store),
-         where this permission is permitted; the feature degrades gracefully to
-         app-private storage when it is not granted. On API <= 28 the legacy
-         WRITE permission suffices. -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- On-device AI model files live in this app's own external files dir
+         (Android/data/<pkg>/files/AI Models), which needs no storage permission.
+         MANAGE_EXTERNAL_STORAGE used to be declared here so models could be
+         shared with the sibling Hermes app; that was dropped because Play
+         restricts All-Files-Access to a short list of qualifying use cases that
+         cross-app model reuse is not part of. -->
 
     <application
         android:allowBackup="true"
@@ -28,14 +27,12 @@
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.MyApplication">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
             android:theme="@style/Theme.OctoJotter.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

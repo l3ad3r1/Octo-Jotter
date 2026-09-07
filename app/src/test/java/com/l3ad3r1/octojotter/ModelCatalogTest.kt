@@ -12,13 +12,13 @@ import java.io.File
 class ModelCatalogTest {
 
     @Test
-    fun `shared dir name matches the Hermes cross-app contract`() {
-        // Hermes ModelCatalog.DEFAULT_DIR_NAME is "AI Models"; renaming breaks reuse.
-        assertEquals("AI Models", ModelStorage.SHARED_DIR_NAME)
+    fun `models dir name is stable`() {
+        // Renaming orphans every model an existing install already downloaded.
+        assertEquals("AI Models", ModelStorage.MODELS_DIR_NAME)
     }
 
     @Test
-    fun `chat model filenames mirror Hermes so downloads are reused`() {
+    fun `chat model filenames are the expected Q4_K_M builds`() {
         val names = ModelCatalog.CHAT_MODELS.map { it.file.fileName }.toSet()
         assertTrue(names.contains("Llama-3.2-1B-Instruct-Q4_K_M.gguf"))
         assertTrue(names.contains("Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"))
