@@ -124,6 +124,6 @@ fun MyApplicationTheme(
   }
 
   CompositionLocalProvider(LocalOctoStatusColors provides statusColors) {
-    MaterialTheme(colorScheme = colorScheme, typography = typography, content = content)
+    MaterialTheme(colorScheme = colorScheme, typography = typography, shapes = OctoMaterialShapes, content = content)
   }
 }

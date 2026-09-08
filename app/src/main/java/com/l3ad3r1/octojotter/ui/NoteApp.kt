@@ -161,6 +161,8 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Hub
@@ -980,7 +982,68 @@ fun NotesListScreen(
             }
         }
     ) {
+        // Medium+ windows get a side NavigationRail instead of a bottom bar —
+        // the standard M3 adaptive swap (bottomBar for compact, rail for
+        // medium and up). Everything the tablet-width bottom bar used to
+        // promote into itself lives here instead now; the drawer's own
+        // isTablet gating on these same destinations is unchanged.
+        Row(Modifier.fillMaxSize()) {
+            if (isTablet) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.testTag("notes_nav_rail"),
+                ) {
+                    NavigationRailItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Notes") },
+                        label = { Text("Notes") },
+                        selected = !tagsExpanded,
+                        onClick = { tagsExpanded = false }
+                    )
+                    if (viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
+                        NavigationRailItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes") },
+                            label = { Text("Ask AI") },
+                            selected = false,
+                            onClick = { context.startActivity(Intent(context, AiChatActivity::class.java)) },
+                            modifier = Modifier.testTag("open_chat_button")
+                        )
+                    }
+                    NavigationRailItem(
+                        icon = { Icon(Icons.Default.CheckBox, contentDescription = "Task Board") },
+                        label = { Text("Tasks") },
+                        selected = false,
+                        onClick = onNavigateToTaskBoard,
+                        modifier = Modifier.testTag("nav_task_board_button")
+                    )
+                    if (graphViewEnabled) {
+                        NavigationRailItem(
+                            icon = { Icon(Icons.Default.Hub, contentDescription = "Graph View") },
+                            label = { Text("Graph") },
+                            selected = false,
+                            onClick = onNavigateToGraphView,
+                            modifier = Modifier.testTag("nav_graph_view_button")
+                        )
+                    }
+                    NavigationRailItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
+                        label = { Text("Tags") },
+                        selected = tagsExpanded,
+                        onClick = {
+                            searchExpanded = false
+                            tagsExpanded = true
+                        },
+                        modifier = Modifier.testTag("nav_tags_button")
+                    )
+                    NavigationRailItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        selected = false,
+                        onClick = onNavigateToSettings
+                    )
+                }
+            }
         Scaffold(
+            modifier = Modifier.weight(1f),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
@@ -1057,69 +1120,51 @@ fun NotesListScreen(
                 )
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ) {
-                    NavigationBarItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Notes") },
-                        label = { Text("Notes") },
-                        selected = !tagsExpanded,
-                        onClick = { tagsExpanded = false }
-                    )
-                    // Search is the always-visible bar up top now, not a
-                    // destination — so this slot is Ask AI outright, and only
-                    // where there's an AI to ask and the On-device AI feature
-                    // plugin is actually enabled.
-                    if (viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
+                // Only on compact width now — see the NavigationRail this
+                // Scaffold is wrapped in above for medium+ windows, which
+                // carries every one of these same destinations (including
+                // the Tasks/Graph pair this bar used to promote into itself
+                // at tablet width) plus Ask AI/Graph's own enablement checks.
+                if (!isTablet) {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ) {
                         NavigationBarItem(
-                            icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes") },
-                            label = { Text("Ask AI") },
-                            selected = false,
-                            onClick = { context.startActivity(Intent(context, AiChatActivity::class.java)) },
-                            modifier = Modifier.testTag("open_chat_button")
+                            icon = { Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Notes") },
+                            label = { Text("Notes") },
+                            selected = !tagsExpanded,
+                            onClick = { tagsExpanded = false }
                         )
-                    }
-                    // On a tablet-width screen these plugin destinations are
-                    // promoted straight into the bar instead of sitting behind
-                    // the hamburger drawer — see the ModalDrawerSheet above,
-                    // which hides these same items when isTablet is true.
-                    // "Today" and "Templates" don't need a spot here any more —
-                    // both are pure creation shortcuts now, and the FAB's speed
-                    // dial covers that; this bar keeps only things you browse.
-                    if (isTablet) {
-                        NavigationBarItem(
-                            icon = { Icon(Icons.Default.CheckBox, contentDescription = "Task Board") },
-                            label = { Text("Tasks") },
-                            selected = false,
-                            onClick = onNavigateToTaskBoard,
-                            modifier = Modifier.testTag("nav_task_board_button")
-                        )
-                        if (graphViewEnabled) {
+                        // Search is the always-visible bar up top now, not a
+                        // destination — so this slot is Ask AI outright, and only
+                        // where there's an AI to ask and the On-device AI feature
+                        // plugin is actually enabled.
+                        if (viewModel.semanticSearchAvailable && onDeviceAiEnabled) {
                             NavigationBarItem(
-                                icon = { Icon(Icons.Default.Hub, contentDescription = "Graph View") },
-                                label = { Text("Graph") },
+                                icon = { Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Ask your notes") },
+                                label = { Text("Ask AI") },
                                 selected = false,
-                                onClick = onNavigateToGraphView,
-                                modifier = Modifier.testTag("nav_graph_view_button")
+                                onClick = { context.startActivity(Intent(context, AiChatActivity::class.java)) },
+                                modifier = Modifier.testTag("open_chat_button")
                             )
                         }
+                        NavigationBarItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
+                            label = { Text("Tags") },
+                            selected = tagsExpanded,
+                            onClick = {
+                                searchExpanded = false
+                                tagsExpanded = true
+                            },
+                            modifier = Modifier.testTag("nav_tags_button")
+                        )
+                        NavigationBarItem(
+                            icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                            label = { Text("Settings") },
+                            selected = false,
+                            onClick = onNavigateToSettings
+                        )
                     }
-                    NavigationBarItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.Label, contentDescription = "Tags") },
-                        label = { Text("Tags") },
-                        selected = tagsExpanded,
-                        onClick = {
-                            searchExpanded = false
-                            tagsExpanded = true
-                        },
-                        modifier = Modifier.testTag("nav_tags_button")
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") },
-                        selected = false,
-                        onClick = onNavigateToSettings
-                    )
                 }
             },
             floatingActionButton = {
@@ -1485,6 +1530,8 @@ fun NotesListScreen(
             }
             }
         }
+    }
+
     }
 
     notePendingDelete?.let { note ->
@@ -5132,19 +5179,27 @@ fun formatRelativeTimestamp(timestamp: Long): String {
 
 @Composable
 fun SyncStatusIndicator(syncState: SyncState) {
+    // Theme-aware badge colors: Synced/Syncing come from OctoStatusColors
+    // (the same CompositionLocal every other semantic color in the app uses),
+    // Offline reuses the standard M3 error/errorContainer role directly since
+    // that's exactly what it's for. The old hardcoded hex here only looked
+    // right in light mode.
+    val octoStatus = MaterialTheme.octoStatus
+    val errorContainer = MaterialTheme.colorScheme.errorContainer
+    val onErrorContainer = MaterialTheme.colorScheme.onErrorContainer
     val backgroundColor by animateColorAsState(
         targetValue = when (syncState) {
-            SyncState.Synced -> Color(0xFFE8F5E9)
-            SyncState.Syncing -> Color(0xFFE3F2FD)
-            SyncState.Offline -> Color(0xFFFFEBEE)
+            SyncState.Synced -> octoStatus.syncedContainer
+            SyncState.Syncing -> octoStatus.syncingContainer
+            SyncState.Offline -> errorContainer
         },
         label = "syncBgColor"
     )
     val contentColor by animateColorAsState(
         targetValue = when (syncState) {
-            SyncState.Synced -> Color(0xFF2E7D32)
-            SyncState.Syncing -> Color(0xFF1565C0)
-            SyncState.Offline -> Color(0xFFC62828)
+            SyncState.Synced -> octoStatus.onSyncedContainer
+            SyncState.Syncing -> octoStatus.onSyncingContainer
+            SyncState.Offline -> onErrorContainer
         },
         label = "syncContentColor"
     )
@@ -5231,7 +5286,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
                 addStyle(
                     style = SpanStyle(
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2F80ED),
+                        color = sc.heading1,
                         fontSize = 20.sp
                     ),
                     start = currentOffset,
@@ -5241,7 +5296,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
                 addStyle(
                     style = SpanStyle(
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2196F3),
+                        color = sc.heading2,
                         fontSize = 18.sp
                     ),
                     start = currentOffset,
@@ -5251,7 +5306,7 @@ fun highlightMarkdown(text: String, isDark: Boolean): AnnotatedString {
                 addStyle(
                     style = SpanStyle(
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF00BCD4),
+                        color = sc.heading3,
                         fontSize = 16.sp
                     ),
                     start = currentOffset,

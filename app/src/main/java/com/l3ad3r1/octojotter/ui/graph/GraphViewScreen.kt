@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,21 +48,30 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.l3ad3r1.octojotter.ai.graph.GraphAiViewModel
 import com.l3ad3r1.octojotter.ui.NoteViewModel
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 private const val NODE_HIT_RADIUS = 40f
 private const val EDGE_HIT_RADIUS = 18f
 private const val DIMMED_ALPHA = 0.25f
+private val GRAPH_NODE_TOUCH_TARGET = 48.dp
 
 /**
  * Visualizes the note network — Obsidian's signature feature, extended with a
@@ -112,6 +122,21 @@ fun GraphViewScreen(
 
     var selectedEdge by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val relationLabels by graphAi.relationLabels.collectAsStateWithLifecycle()
+
+    // Shared by the canvas's own pointer-tap detection and by each node's
+    // accessibility custom action below, so a screen reader can trigger the
+    // exact same relation-labeling flow a sighted tap on the edge does.
+    fun selectEdge(fromId: Int, toId: Int) {
+        selectedEdge = fromId to toId
+        val noteA = notesById[fromId]
+        val noteB = notesById[toId]
+        if (noteA != null && noteB != null && !noteA.locked && !noteB.locked) {
+            graphAi.labelRelation(
+                GraphAiViewModel.RelationNote(noteA.id, noteA.title, noteA.content),
+                GraphAiViewModel.RelationNote(noteB.id, noteB.title, noteB.content),
+            )
+        }
+    }
 
     var queryBarVisible by remember { mutableStateOf(false) }
     var queryText by remember { mutableStateOf("") }
@@ -209,15 +234,7 @@ fun GraphViewScreen(
                                     if (distanceToSegment(local, Offset(from.x, from.y), Offset(to.x, to.y)) > EDGE_HIT_RADIUS) {
                                         return@detectTapGestures
                                     }
-                                    selectedEdge = from.id to to.id
-                                    val noteA = notesById[from.id]
-                                    val noteB = notesById[to.id]
-                                    if (noteA != null && noteB != null && !noteA.locked && !noteB.locked) {
-                                        graphAi.labelRelation(
-                                            GraphAiViewModel.RelationNote(noteA.id, noteA.title, noteA.content),
-                                            GraphAiViewModel.RelationNote(noteB.id, noteB.title, noteB.content),
-                                        )
-                                    }
+                                    selectEdge(from.id, to.id)
                                 }
                             }
                     ) {
@@ -274,6 +291,45 @@ fun GraphViewScreen(
                                 )
                             }
                         }
+                    }
+                    // Accessibility overlay: the graph above is otherwise a raw Canvas —
+                    // invisible to TalkBack, since drawCircle/drawText carry no semantics
+                    // of their own. One semantics-only Box per node, positioned with the
+                    // same node*scale+offset transform the canvas and its tap detector
+                    // use, exposes each note as a focusable, clickable element with the
+                    // note's title, plus one custom action per edge touching it so a
+                    // screen-reader user can reach relation-labeling too — without a
+                    // `.clickable`/`.pointerInput` of its own, these boxes carry no
+                    // pointer input node, so they're transparent to real touch/mouse and
+                    // never compete with the canvas's own gesture handling.
+                    val density = LocalDensity.current
+                    val touchTargetPx = with(density) { GRAPH_NODE_TOUCH_TARGET.toPx() }
+                    current.nodes.forEachIndexed { index, node ->
+                        val screenX = node.x * scale + offset.x
+                        val screenY = node.y * scale + offset.y
+                        val edgeActions = current.edges.mapNotNull { edge ->
+                            val otherIndex = when (index) {
+                                edge.fromIndex -> edge.toIndex
+                                edge.toIndex -> edge.fromIndex
+                                else -> return@mapNotNull null
+                            }
+                            val other = current.nodes[otherIndex]
+                            CustomAccessibilityAction("Relationship with ${other.title}") {
+                                selectEdge(node.id, other.id)
+                                true
+                            }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .offset { IntOffset((screenX - touchTargetPx / 2f).roundToInt(), (screenY - touchTargetPx / 2f).roundToInt()) }
+                                .size(GRAPH_NODE_TOUCH_TARGET)
+                                .testTag("graph_node_${node.id}")
+                                .semantics {
+                                    contentDescription = node.title
+                                    onClick("Open note") { onNavigateToEditor(node.id); true }
+                                    if (edgeActions.isNotEmpty()) customActions = edgeActions
+                                }
+                        )
                     }
                     if (current.edges.any { it.kind == EdgeKind.SEMANTIC }) {
                         GraphLegend(modifier = Modifier.align(Alignment.BottomStart).padding(12.dp))
