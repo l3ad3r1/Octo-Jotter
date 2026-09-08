@@ -59,6 +59,17 @@ fun NoteCard(
         },
     )
 
+    // M3: a container color may only be paired with its own "on container"
+    // color (m3.material.io/styles/color/roles) — never a generic
+    // onSurfaceVariant gray, which is what made a color-coded card's text
+    // look off. Every NoteColor pair is hand-verified at >=4.5:1 contrast at
+    // full opacity only (the worst pair, yellow's dark-theme card, is 4.53:1)
+    // — dimming `onColor` for lower-emphasis text the way an uncolored card
+    // dims onSurface to onSurfaceVariant would drop below that, so every
+    // text/icon on a colored card uses `onColor` at full strength.
+    val displayColor = note.displayColor()
+    val onColor = displayColor?.onContainerColor()
+
     SwipeToDismissBox(
         state = dismissState,
         backgroundContent = {
@@ -98,8 +109,9 @@ fun NoteCard(
             // color-coded note (Google Keep style) overrides that tone with
             // its own fixed hue instead.
             colors = CardDefaults.cardColors(
-                containerColor = NoteColor.fromId(note.color)?.containerColor()
-                    ?: MaterialTheme.colorScheme.surfaceContainerHigh
+                containerColor = displayColor?.containerColor()
+                    ?: MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = onColor ?: MaterialTheme.colorScheme.onSurface,
             ),
         ) {
             Column(
@@ -124,13 +136,13 @@ fun NoteCard(
                     Text(
                         text = formatRelativeTimestamp(note.lastModifiedLocally),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = onColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(OctoSpacing.sm))
                     Icon(
                         imageVector = Icons.Default.Description,
                         contentDescription = "Markdown note",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = onColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
                     )
                 }
@@ -138,7 +150,7 @@ fun NoteCard(
                 Text(
                     text = if (note.locked) "Locked note" else note.content.ifBlank { "No content…" },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = onColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
