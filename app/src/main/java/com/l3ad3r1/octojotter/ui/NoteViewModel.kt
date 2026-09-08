@@ -512,10 +512,16 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
                 .filter { it.isNotEmpty() && it != note.displayTitle }
                 .distinct()
                 .toList()
+            val locked = note.locked || note.encrypted
             com.l3ad3r1.octojotter.ui.graph.GraphNoteData(
                 id = note.id,
                 title = note.displayTitle,
-                linkedTitles = links
+                linkedTitles = links,
+                // Locked/encrypted content stays out of anything AI-adjacent (same
+                // invariant NoteIndexer enforces for the embedding index) — the
+                // node still appears by title, its body just never leaves it.
+                content = if (locked) "" else note.content,
+                locked = locked,
             )
         }
     }

@@ -5,9 +5,11 @@ import com.l3ad3r1.octojotter.ai.embed.EmbeddingService
 import com.l3ad3r1.octojotter.ai.embed.HashingBagOfWordsEmbeddingService
 import com.l3ad3r1.octojotter.ai.chat.LlamaTextGenerator
 import com.l3ad3r1.octojotter.ai.chat.RagChatEngine
+import com.l3ad3r1.octojotter.ai.chat.TextGenerator
 import com.l3ad3r1.octojotter.ai.embed.OnnxMiniLmEmbeddingService
 import com.l3ad3r1.octojotter.ai.index.NoteChunker
 import com.l3ad3r1.octojotter.ai.index.NoteIndexer
+import com.l3ad3r1.octojotter.ai.index.NoteSimilarity
 import com.l3ad3r1.octojotter.ai.index.VectorStore
 import com.l3ad3r1.octojotter.ai.model.ChatModel
 import com.l3ad3r1.octojotter.ai.model.ModelCatalog
@@ -81,6 +83,9 @@ class AiContainer private constructor(
 
     val vectorStore: VectorStore by lazy { VectorStore(embeddingDao) }
 
+    /** Semantic-similarity note pairs for Graph View's semantic-edge overlay. */
+    fun noteSimilarity(): NoteSimilarity = NoteSimilarity(embeddingDao)
+
     fun indexer(): NoteIndexer = NoteIndexer(
         notes = DaoNoteSource(noteDao),
         embeddingDao = embeddingDao,
@@ -117,21 +122,31 @@ class AiContainer private constructor(
      *  the native library can't load, so only touch this on capable devices. */
     private val inferenceEngine by lazy { OnDeviceLlm.engine(appContext) }
 
+    // Shared across ragChat() and any other on-device text generation (e.g. Graph
+    // View's relation labeling) so LlamaTextGenerator's loaded-model check — keyed
+    // on its own instance state — actually sees what's resident instead of forcing
+    // a reload on every call. modelFile() re-reads chatModel each call, so a model
+    // switch is still picked up on the next generate().
+    private val textGeneratorInstance: TextGenerator by lazy {
+        LlamaTextGenerator(
+            engine = inferenceEngine,
+            modelFile = { modelManager.storage.resolvedChatModelFile(chatModel.file.fileName).takeIf { it.exists() } },
+        )
+    }
+
+    /** The on-device text generator. Only call on a device where
+     *  [AiCapability.supportsChat] is true and the chat model is present. */
+    fun textGenerator(): TextGenerator = textGeneratorInstance
+
     /**
      * A RAG chat engine grounded in the user's notes. Only call on a device where
      * [AiCapability.supportsChat] is true and the chat model is present.
      */
-    fun ragChat(): RagChatEngine {
-        val generator = LlamaTextGenerator(
-            engine = inferenceEngine,
-            modelFile = { modelManager.storage.resolvedChatModelFile(chatModel.file.fileName).takeIf { it.exists() } },
-        )
-        return RagChatEngine(
-            embedder = embedder(),
-            vectorStore = vectorStore,
-            generator = generator,
-        )
-    }
+    fun ragChat(): RagChatEngine = RagChatEngine(
+        embedder = embedder(),
+        vectorStore = vectorStore,
+        generator = textGenerator(),
+    )
 
     private class DaoNoteSource(private val dao: NoteDao) : NoteIndexer.NoteSource {
         override suspend fun all(): List<NoteEntity> = dao.getAllNotes()

@@ -6,7 +6,17 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 data class GraphNode(val id: Int, val title: String, var x: Float, var y: Float, val degree: Int)
-data class GraphEdge(val fromIndex: Int, val toIndex: Int)
+
+/** [WIKILINK] edges come from an explicit `[[link]]`; [SEMANTIC] edges are a
+ *  same-meaning note pair found by embedding similarity with no such link — see
+ *  [com.l3ad3r1.octojotter.ai.index.NoteSimilarity]. Kept out of the layout when
+ *  a wikilink already connects the same pair, so a link is never drawn twice. */
+enum class EdgeKind { WIKILINK, SEMANTIC }
+
+/** [weight] is the cosine similarity for a [EdgeKind.SEMANTIC] edge (used to
+ *  scale both its pull in the layout and its opacity on screen); wikilinks
+ *  always pull at full strength, so it is unused for them. */
+data class GraphEdge(val fromIndex: Int, val toIndex: Int, val kind: EdgeKind, val weight: Float = 1f)
 data class GraphLayoutResult(val nodes: List<GraphNode>, val edges: List<GraphEdge>)
 
 /**
@@ -17,8 +27,17 @@ data class GraphLayoutResult(val nodes: List<GraphNode>, val edges: List<GraphEd
  * for a single static-then-draggable view.
  */
 object GraphLayout {
+    /** Semantic edges pull weaker than a wikilink, so the wikilink structure
+     *  still dominates the shape and similarity only nudges related notes closer. */
+    private const val SEMANTIC_ATTRACTION_SCALE = 0.5f
+
+    /**
+     * [semanticLinks] are (noteIdA, noteIdB, cosine similarity) triples — by note
+     * id, not index, since callers compute them independently of this layout.
+     */
     fun compute(
         notes: List<GraphNoteData>,
+        semanticLinks: List<Triple<Int, Int, Float>> = emptyList(),
         width: Float = 1000f,
         height: Float = 1000f,
         iterations: Int = 300
@@ -26,10 +45,24 @@ object GraphLayout {
         if (notes.isEmpty()) return GraphLayoutResult(emptyList(), emptyList())
 
         val indexByTitle = notes.withIndex().associate { (i, n) -> n.title to i }
+        val indexById = notes.withIndex().associate { (i, n) -> n.id to i }
         val edges = mutableListOf<GraphEdge>()
+        val wikilinkPairs = HashSet<Pair<Int, Int>>()
         notes.forEachIndexed { i, note ->
             note.linkedTitles.forEach { linked ->
-                indexByTitle[linked]?.let { j -> if (j != i) edges += GraphEdge(i, j) }
+                indexByTitle[linked]?.let { j ->
+                    if (j != i) {
+                        edges += GraphEdge(i, j, EdgeKind.WIKILINK)
+                        wikilinkPairs += unordered(i, j)
+                    }
+                }
+            }
+        }
+        semanticLinks.forEach { (noteIdA, noteIdB, score) ->
+            val i = indexById[noteIdA]
+            val j = indexById[noteIdB]
+            if (i != null && j != null && i != j && unordered(i, j) !in wikilinkPairs) {
+                edges += GraphEdge(i, j, EdgeKind.SEMANTIC, weight = score)
             }
         }
         val degree = IntArray(notes.size)
@@ -70,7 +103,8 @@ object GraphLayout {
                 var dy = y[i] - y[j]
                 var dist = sqrt(dx * dx + dy * dy)
                 if (dist < 0.01f) dist = 0.01f
-                val force = (dist * dist) / k
+                val attraction = if (e.kind == EdgeKind.SEMANTIC) e.weight * SEMANTIC_ATTRACTION_SCALE else 1f
+                val force = (dist * dist) / k * attraction
                 val fx = dx / dist * force
                 val fy = dy / dist * force
                 dispX[i] -= fx; dispY[i] -= fy
@@ -90,4 +124,6 @@ object GraphLayout {
         }
         return GraphLayoutResult(nodes, edges)
     }
+
+    private fun unordered(a: Int, b: Int): Pair<Int, Int> = if (a < b) a to b else b to a
 }
