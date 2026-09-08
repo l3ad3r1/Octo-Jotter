@@ -1,5 +1,6 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 import java.util.Properties
+import org.gradle.api.tasks.PathSensitivity
 
 plugins {
   alias(libs.plugins.android.application)
@@ -109,6 +110,16 @@ android {
     }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+
+  // CommunityPluginRegistryTest reads plugins/ straight from the repo, which
+  // Gradle cannot see from the task's normal inputs — so editing a plugin left
+  // the test UP-TO-DATE and it silently did not re-run, defeating the point of
+  // having it. Declaring the directory makes a plugin change invalidate it.
+  testOptions.unitTests.all {
+    it.inputs.dir(rootProject.file("plugins"))
+      .withPropertyName("communityPlugins")
+      .withPathSensitivity(PathSensitivity.RELATIVE)
+  }
 
   // Room's MigrationTestHelper resolves the exported schema through the app's
   // asset loader, keyed by database class name and version, so the JSON has to

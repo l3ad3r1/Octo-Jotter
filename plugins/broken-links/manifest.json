@@ -1,0 +1,13 @@
+{
+  "id": "broken-links",
+  "name": "Broken Links",
+  "version": "1.0.0",
+  "minAppVersion": "2.2",
+  "author": "l3ad3r1",
+  "description": "Flags [[wikilinks]] in this note that point at a note you don't have yet.",
+  "type": "script",
+  "permissions": [
+    "notes:read"
+  ],
+  "main": "octo.registerCommand(\"broken-links\", \"Find broken [[wikilinks]]\", function (t) {\n  var text = String(t);\n  var titles = octo.notes.titles();\n  var known = {};\n  for (var i = 0; i < titles.length; i++) {\n    var full = String(titles[i]);\n    known[full.toLowerCase()] = true;\n    var parts = full.split(\"__\");\n    known[parts[parts.length - 1].toLowerCase()] = true;\n  }\n  var re = /\\[\\[([^\\]]+)\\]\\]/g, m, seen = {}, missing = [];\n  while ((m = re.exec(text)) !== null) {\n    var target = m[1].split(\"|\")[0].split(\"#\")[0].replace(/^\\s+|\\s+$/g, \"\");\n    if (!target) continue;\n    var key = target.toLowerCase();\n    if (seen[key]) continue;\n    seen[key] = true;\n    if (!known[key]) missing.push(target);\n  }\n  if (missing.length === 0) return text;\n  var out = [\"> [!warning] Broken links\",\n             \"> \" + missing.length + \" link\" + (missing.length === 1 ? \"\" : \"s\") +\n             \" point at a note that does not exist yet:\"];\n  for (var j = 0; j < missing.length; j++) out.push(\"> - \" + missing[j]);\n  return out.join(\"\\n\") + \"\\n\\n\" + text;\n});"
+}

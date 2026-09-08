@@ -1,0 +1,34 @@
+{
+  "id": "gruvbox-dark",
+  "name": "Gruvbox Dark",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "Retro groove: warm earthy browns with amber and green accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#FABD2F",
+      "onPrimary": "#282828",
+      "primaryContainer": "#5B4A18",
+      "onPrimaryContainer": "#FBF1C7",
+      "secondary": "#8EC07C",
+      "onSecondary": "#1D2021",
+      "secondaryContainer": "#3C4A34",
+      "onSecondaryContainer": "#E8F0D9",
+      "background": "#282828",
+      "onBackground": "#EBDBB2",
+      "surface": "#282828",
+      "onSurface": "#EBDBB2",
+      "surfaceVariant": "#3C3836",
+      "onSurfaceVariant": "#D5C4A1",
+      "surfaceContainer": "#32302F",
+      "error": "#FB4934",
+      "onError": "#282828",
+      "outline": "#665C54",
+      "outlineVariant": "#504945"
+    }
+  }
+}

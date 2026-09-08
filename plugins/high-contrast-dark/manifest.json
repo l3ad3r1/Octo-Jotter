@@ -1,0 +1,34 @@
+{
+  "id": "high-contrast-dark",
+  "name": "High Contrast",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "Maximum-contrast dark theme: pure black, pure white text, bright unambiguous accents. Built for readability rather than looks.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#FFFF00",
+      "onPrimary": "#000000",
+      "primaryContainer": "#333300",
+      "onPrimaryContainer": "#FFFFAA",
+      "secondary": "#00FFFF",
+      "onSecondary": "#000000",
+      "secondaryContainer": "#003333",
+      "onSecondaryContainer": "#AAFFFF",
+      "background": "#000000",
+      "onBackground": "#FFFFFF",
+      "surface": "#000000",
+      "onSurface": "#FFFFFF",
+      "surfaceVariant": "#1A1A1A",
+      "onSurfaceVariant": "#FFFFFF",
+      "surfaceContainer": "#0D0D0D",
+      "error": "#FF5555",
+      "onError": "#000000",
+      "outline": "#FFFFFF",
+      "outlineVariant": "#808080"
+    }
+  }
+}

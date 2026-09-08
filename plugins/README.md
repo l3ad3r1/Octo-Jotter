@@ -29,6 +29,10 @@ The plugins currently in this registry — browse their manifests for reference.
 | [Amber](amber-dark/manifest.json) | dark | Warm dark lit by golden amber accents. |
 | [Rose Light](rose-light/manifest.json) | light | Warm light theme with rose accents. |
 | [Daybreak](daybreak/manifest.json) | light | Warm golden-hour light theme; sunrise companion to Midnight. |
+| [Nord](nord/manifest.json) | dark | The Nord palette: cool arctic blues with muted frost accents. |
+| [Gruvbox Dark](gruvbox-dark/manifest.json) | dark | Retro groove: warm earthy browns with amber and green accents. |
+| [Solarized Light](solarized-light/manifest.json) | light | Solarized light: low-glare cream with cyan and blue accents. |
+| [High Contrast](high-contrast-dark/manifest.json) | dark | Pure black, pure white text, bright unambiguous accents — built for readability. |
 
 ### Scripts
 | Plugin | Permissions | Description |
@@ -39,6 +43,10 @@ The plugins currently in this registry — browse their manifests for reference.
 | [Second Brain Tools](pkm-tools/manifest.json) | — | Dated daily note, append timestamp, extract open tasks. |
 | [Note Actions](note-actions/manifest.json) | `notes:write` | Duplicate a note, or split its tasks into a new note. |
 | [Open Tasks Dashboard](task-dashboard/manifest.json) | `notes:read` | Build a cross-note open task dashboard and folder-grouped notes index. |
+| [Note Stats](note-stats/manifest.json) | — | Word count, reading time and a heading outline. |
+| [Table Formatter](table-format/manifest.json) | — | Aligns every Markdown pipe table so the columns line up. |
+| [Front-matter Tools](frontmatter/manifest.json) | — | Adds or refreshes YAML front-matter, harvesting tags from inline #hashtags. |
+| [Broken Links](broken-links/manifest.json) | `notes:read` | Flags `[[wikilinks]]` pointing at a note that does not exist yet. |
 
 ### Snippets
 | Plugin | Description |
@@ -46,6 +54,7 @@ The plugins currently in this registry — browse their manifests for reference.
 | [Markdown Snippets](md-snippets/manifest.json) | Callout, table, code block, task list, front-matter templates. |
 | [Second Brain Templates](second-brain/manifest.json) | Daily note, weekly review, project, meeting, retro, bug, code, learning, ADR, inbox. |
 | [Bullet Journal Keys](bullet-journal/manifest.json) | Rapid-log key: task/event/appointment/note bullets, completed/migrated/cancelled marks, signifiers, weather log, daily-log template. |
+| [Meeting Notes](meeting-notes/manifest.json) | Meeting, stand-up, 1:1, retro and decision-record templates. |
 
 > Building a knowledge vault? See the [Second Brain guide](../docs/SECOND-BRAIN.md).
 

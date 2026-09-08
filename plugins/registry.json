@@ -145,6 +145,88 @@
       "type": "snippet",
       "version": "1.0.0",
       "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/bullet-journal/manifest.json"
+    },
+    {
+      "id": "broken-links",
+      "name": "Find broken [[wikilinks]]",
+      "author": "l3ad3r1",
+      "description": "Flags [[wikilinks]] in this note that point at a note you don't have yet.",
+      "type": "script",
+      "version": "1.0.0",
+      "permissions": ["notes:read"],
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/broken-links/manifest.json"
+    },
+    {
+      "id": "frontmatter",
+      "name": "Front-matter Tools",
+      "author": "l3ad3r1",
+      "description": "Adds or refreshes YAML front-matter: title from the first heading, created/updated dates, and tags harvested from inline #hashtags.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/frontmatter/manifest.json"
+    },
+    {
+      "id": "note-stats",
+      "name": "Note Stats",
+      "author": "l3ad3r1",
+      "description": "Prepends a word count, reading time and heading outline for the current note.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/note-stats/manifest.json"
+    },
+    {
+      "id": "table-format",
+      "name": "Table Formatter",
+      "author": "l3ad3r1",
+      "description": "Aligns every Markdown pipe table in the note so the columns line up.",
+      "type": "script",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/table-format/manifest.json"
+    },
+    {
+      "id": "nord",
+      "name": "Nord",
+      "author": "l3ad3r1",
+      "description": "The Nord palette: cool arctic blues with muted frost accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/nord/manifest.json"
+    },
+    {
+      "id": "gruvbox-dark",
+      "name": "Gruvbox Dark",
+      "author": "l3ad3r1",
+      "description": "Retro groove: warm earthy browns with amber and green accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/gruvbox-dark/manifest.json"
+    },
+    {
+      "id": "solarized-light",
+      "name": "Solarized Light",
+      "author": "l3ad3r1",
+      "description": "Ethan Schoonover's Solarized, light variant: low-glare cream with cyan and blue accents.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/solarized-light/manifest.json"
+    },
+    {
+      "id": "high-contrast-dark",
+      "name": "High Contrast",
+      "author": "l3ad3r1",
+      "description": "Maximum-contrast dark theme: pure black, pure white text, bright unambiguous accents. Built for readability rather than looks.",
+      "type": "theme",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/high-contrast-dark/manifest.json"
+    },
+    {
+      "id": "meeting-notes",
+      "name": "Meeting Notes",
+      "author": "l3ad3r1",
+      "description": "Insertable templates for meetings, stand-ups, 1:1s, retros and decision records.",
+      "type": "snippet",
+      "version": "1.0.0",
+      "manifestUrl": "https://raw.githubusercontent.com/l3ad3r1/Octo-Jotter/main/plugins/meeting-notes/manifest.json"
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "id": "frontmatter",
+  "name": "Front-matter Tools",
+  "version": "1.0.0",
+  "minAppVersion": "1.7",
+  "author": "l3ad3r1",
+  "description": "Adds or refreshes YAML front-matter: title from the first heading, created/updated dates, and tags harvested from inline #hashtags.",
+  "type": "script",
+  "permissions": [],
+  "main": "octo.registerCommand(\"frontmatter\", \"Add or refresh front-matter\", function (t) {\n  var text = String(t), body = text, existing = null;\n  var m = text.match(/^---\\r?\\n([\\s\\S]*?)\\r?\\n---[ \\t]*\\r?\\n?/);\n  if (m) { existing = m[1]; body = text.substring(m[0].length); }\n  function field(src, key) {\n    if (!src) return null;\n    var f = src.match(new RegExp(\"^\" + key + \":[ \\t]*(.+)$\", \"m\"));\n    return f ? f[1].replace(/^\\s+|\\s+$/g, \"\") : null;\n  }\n  var title = null;\n  var h = body.match(/^#[ \\t]+(.+)$/m);\n  if (h) title = h[1].replace(/^\\s+|\\s+$/g, \"\");\n  if (!title) title = field(existing, \"title\");\n  var tags = [], seen = {}, re = /(^|\\s)#([A-Za-z][A-Za-z0-9_\\-]*)/g, x;\n  while ((x = re.exec(body)) !== null) {\n    if (!seen[x[2]]) { seen[x[2]] = true; tags.push(x[2]); }\n  }\n  function pad(n) { return n < 10 ? \"0\" + n : \"\" + n; }\n  var d = new Date();\n  var today = d.getFullYear() + \"-\" + pad(d.getMonth() + 1) + \"-\" + pad(d.getDate());\n  var out = [\"---\"];\n  if (title) out.push(\"title: \" + title);\n  out.push(\"created: \" + (field(existing, \"created\") || today));\n  out.push(\"updated: \" + today);\n  if (tags.length) {\n    out.push(\"tags:\");\n    for (var i = 0; i < tags.length; i++) out.push(\"  - \" + tags[i]);\n  }\n  out.push(\"---\");\n  return out.join(\"\\n\") + \"\\n\" + body.replace(/^[\\r\\n]+/, \"\");\n});"
+}

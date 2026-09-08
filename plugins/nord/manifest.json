@@ -1,0 +1,34 @@
+{
+  "id": "nord",
+  "name": "Nord",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "The Nord palette: cool arctic blues with muted frost accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": true,
+    "colors": {
+      "primary": "#88C0D0",
+      "onPrimary": "#2E3440",
+      "primaryContainer": "#3B4C5A",
+      "onPrimaryContainer": "#D8DEE9",
+      "secondary": "#81A1C1",
+      "onSecondary": "#2E3440",
+      "secondaryContainer": "#3B4A5A",
+      "onSecondaryContainer": "#E5E9F0",
+      "background": "#2E3440",
+      "onBackground": "#ECEFF4",
+      "surface": "#2E3440",
+      "onSurface": "#ECEFF4",
+      "surfaceVariant": "#3B4252",
+      "onSurfaceVariant": "#D8DEE9",
+      "surfaceContainer": "#353C4A",
+      "error": "#BF616A",
+      "onError": "#2E3440",
+      "outline": "#4C566A",
+      "outlineVariant": "#434C5E"
+    }
+  }
+}

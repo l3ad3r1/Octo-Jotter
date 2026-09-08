@@ -1,0 +1,34 @@
+{
+  "id": "solarized-light",
+  "name": "Solarized Light",
+  "version": "1.0.0",
+  "minAppVersion": "1.5",
+  "author": "l3ad3r1",
+  "description": "Ethan Schoonover's Solarized, light variant: low-glare cream with cyan and blue accents.",
+  "type": "theme",
+  "permissions": [],
+  "theme": {
+    "dark": false,
+    "colors": {
+      "primary": "#268BD2",
+      "onPrimary": "#FDF6E3",
+      "primaryContainer": "#D6E9F7",
+      "onPrimaryContainer": "#073642",
+      "secondary": "#2AA198",
+      "onSecondary": "#FDF6E3",
+      "secondaryContainer": "#D2ECEA",
+      "onSecondaryContainer": "#00332F",
+      "background": "#FDF6E3",
+      "onBackground": "#073642",
+      "surface": "#FDF6E3",
+      "onSurface": "#073642",
+      "surfaceVariant": "#EEE8D5",
+      "onSurfaceVariant": "#586E75",
+      "surfaceContainer": "#F5EFDC",
+      "error": "#DC322F",
+      "onError": "#FDF6E3",
+      "outline": "#93A1A1",
+      "outlineVariant": "#DDD6C1"
+    }
+  }
+}
