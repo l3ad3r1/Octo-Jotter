@@ -29,12 +29,24 @@ Gist.
 - 🗂️ **Folders & tags** for organising notes, plus **pin**, **search**, and
   swipe-to-delete.
 - 💾 **Auto-saved drafts** so nothing is lost mid-edit.
-- 🌗 **Light / dark / system** theming, plus **community theme/snippet/script
-  plugins** (see [Community plugins](#community-plugins)).
-- 🔒 **Encrypted token storage** — your GitHub Personal Access Token is stored
+- 🗓️ **Daily Notes, Templates and Task Reminders** — one tap opens today's note,
+  reusable templates with `{{date}}`/`{{time}}`/`{{title}}`, and a notification
+  when a note's reminder falls due.
+- 🕸️ **Graph View** — see how notes connect through `[[wikilinks]]`.
+- 📷 **Scan Text (OCR)** — capture a photo and pull its text into a note, on-device.
+- ⌨️ **Command Palette** — quick-action search for jumping to notes and running
+  plugin commands.
+- 🎨 **Note colours**, **Light / dark / system** theming, selectable fonts, plus
+  **community theme/snippet/script plugins** (see [Community plugins](#community-plugins)).
+- 🔒 **App lock** — require your fingerprint **or your device's pattern, PIN or
+  password** before the app opens. No fingerprint reader needed.
+- 🔐 **Encrypted token storage** — your GitHub Personal Access Token is stored
   with `androidx.security.crypto`, never in plain text.
-- ✨ **AI assistance** powered by Gemini (via Firebase AI) — optional, requires
-  Firebase configuration (see below).
+- 🧠 **On-device AI** (optional) — chat and semantic search across your notes,
+  running entirely on your phone. Install it from Community Plugins; it
+  discloses that it reads your notes before you enable it.
+- ✨ **Cloud AI assistance** powered by Gemini (via Firebase AI) — optional,
+  requires Firebase configuration (see below).
 
 ## Tech stack
 
@@ -44,9 +56,13 @@ Gist.
 | UI | Jetpack Compose + Material 3, Navigation Compose |
 | Local storage | Room, DataStore Preferences |
 | Background work | WorkManager |
-| Networking | Retrofit + Moshi + OkHttp (GitHub Gists API) |
-| AI | Firebase AI (Gemini) + App Check |
+| Networking | Retrofit + Moshi + OkHttp (GitHub Gists + Contents API) |
+| On-device AI | llama.cpp (`:ondevice-llm`), ONNX Runtime embeddings, ML Kit OCR |
+| Cloud AI | Firebase AI (Gemini) + App Check |
+| Plugin sandbox | Mozilla Rhino (interpreted, no native code) |
+| Auth | AndroidX Biometric (biometric **or** device credential) |
 | Build | AGP 9.1.1, Gradle 9.6.1, KSP |
+| Tests | JUnit + Robolectric + Roborazzi — 159 tests |
 
 **Min SDK 24 (Android 7.0) · Target/Compile SDK 36 · `applicationId` `com.l3ad3r1.octojotter`**
 
@@ -106,8 +122,9 @@ with the `gist` scope to enable sync. Create one at
 
 ## Building a release APK
 
-The release build type is signed with an upload keystore supplied via environment
-variables (never commit your keystore):
+The release build type is signed automatically from `keystore.properties` in the
+repo root (see [Release signing](#release-signing)); environment variables
+override it for CI. Never commit a keystore or its password:
 
 ```bash
 ./gradlew assembleGithubRelease   # GitHub release APK (self-updating)
@@ -141,6 +158,14 @@ Plugins** (no app rebuild required — the registry is fetched live).
 - 🤝 **Submitting one:** see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the plugin PR
   checklist and review criteria.
 
+**Built-in features are plugins too.** GitHub Sync, On-device AI, Daily Notes,
+Templates, Task Reminders, Graph View, Scan Text and the Command Palette are
+compiled into the app, but they are described by manifests bundled at
+`app/src/main/assets/plugins/` and install, enable and uninstall through exactly
+the same path as a community plugin — including the permission dialog. Install
+one and it starts disabled, like any other; switch it on when you want it. This
+is why On-device AI now tells you it reads your notes before it indexes them.
+
 ### Use it as a Second Brain
 
 With repository sync + the **Second Brain Templates** and **Second Brain Tools**
@@ -157,9 +182,16 @@ app/src/main/java/com/l3ad3r1/octojotter/
 │   └── editor/              # formatting toolbar + pure Markdown transforms
 ├── data/
 │   ├── local/               # Room entities, DAO, DataStore prefs, backup
-│   ├── remote/              # GitHub Gists API (Retrofit), encrypted TokenManager
-│   └── repository/          # NoteRepository — local <-> Gist reconciliation
+│   ├── remote/              # GitHub Gists + Contents API, encrypted TokenManager
+│   └── repository/          # NoteRepository — local <-> Gist/repo reconciliation
+├── plugin/                  # registry, manifests, Rhino script sandbox
+├── ai/                      # on-device models, embeddings, semantic search, RAG chat
+├── ocr/                     # Scan Text (ML Kit, on-device)
+├── reminders/               # Task Reminders (WorkManager + notifications)
 └── sync/                    # SyncWorker (WorkManager)
+
+app/src/main/assets/plugins/ # manifests for the compiled-in feature plugins
+app/schemas/                 # exported Room schemas (migration tests read these)
 ```
 
 ## The app icon
@@ -200,18 +232,31 @@ identity on Play, and signing an update with anything else makes it un-installab
 over an existing install:
 
 ```bash
-keytool -list -v -keystore my-upload-key.jks -storepass "$STORE_PASSWORD" | grep SHA256
-# SHA256: 64:0A:69:CE:99:81:45:31:9C:C5:09:4D:A9:36:67:FC:80:4A:19:D7:90:9F:80:EB:0A:83:57:41:01:F1:7C:5F
+apksigner verify --print-certs app/build/outputs/apk/github/release/app-github-release.apk
+# CN=Octo Jotter, O=l3ad3r1, C=US
+# SHA-256: 640a69ce998145319cc5094da93667fc804a19d7909f80eb0a83574101f17c5f
 ```
 
-```bash
-apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
-```
+### Which key signed what
 
-> ⚠️ **`new-upload-key.jks` (repo root) is NOT the upload key.** It's a stray key whose
-> password is lost; it signed `OctoJotter-v2.6.apk` only (cert `33b83ca0…`). Everything
-> from v2.7 on uses `my-upload-key.jks` (`640a69ce…`). Don't delete either file, but
-> never sign with the stray one.
+Verified with `apksigner` on 2026-09-07 — the history is not uniform, and it
+decides whether an update can install at all:
+
+| Release | Certificate | Key |
+|---|---|---|
+| v2.4, v2.5 | `CN=Octo Jotter, O=l3ad3r1` `640a69ce…` | upload key |
+| v2.6 | `CN=OctoJotter, OU=Dev` `33b83ca0…` | stray key |
+| v2.7 | `CN=Android Debug` `ad1ec444…` | **debug key — a build mistake** |
+| v2.8 onward | `CN=Octo Jotter, O=l3ad3r1` `640a69ce…` | upload key |
+
+**v2.8 cannot install over a v2.6 or v2.7 install** — Android refuses it with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Coming from either, export your notes
+first (Settings → Backup / Restore → *Export Database to JSON*, or sync to
+GitHub), uninstall, install v2.8, then re-import. From v2.4/v2.5 or a fresh
+install it updates normally.
+
+> ⚠️ **`new-upload-key.jks` (repo root) is NOT the upload key.** Its password is
+> lost and it signed v2.6 only. Don't delete it, but never sign with it.
 >
 > ⚠️ Keys and passwords never go in this file or any other committed file — **this
 > repository is public.**

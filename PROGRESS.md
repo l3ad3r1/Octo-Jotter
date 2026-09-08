@@ -112,7 +112,7 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 - Published GitHub Release v1.0 with app-release.apk:
   https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.0
 
-## Status: v2.3+ (HEAD `e711b42` "Add in-app task board" is past v2.3 tag)
+## Status: v2.8 SHIPPED (2026-09-07) — `main` is 2 commits past the v2.8 tag
 Plugin ecosystem shipped (Phases 1–4 + dataview API), privacy sync landed in
 v2.0, in-app task board is the latest unreleased feature.
 
@@ -203,6 +203,65 @@ downloader takes effect from v1.9 onward.
 - Plugin gallery index added to the Second-Brain guide; "Add in-app task
   board" + "Add Dataview-style plugin note queries" (see below) landed
   on top of v2.3 and are NOT YET released.
+
+### v2.8 SHIPPED (2026-09-07) — security + sync audit, schema v13
+Full audit of the codebase; every finding below was reproduced before it was fixed.
+**Security**
+- App lock could be bypassed in one tap: the lock screen carried a "Turn off app
+  lock" button that granted full access without authenticating. Removed. The lock
+  now accepts the device credential (pattern/PIN/password), so a phone or tablet
+  with **no fingerprint reader** can use it — those devices were previously shut
+  out. Re-arms on background (`MainActivity.onStop`), swallows pointer events, and
+  clears the covered subtree's semantics so screen readers can't read behind it.
+  Uses `BIOMETRIC_WEAK or DEVICE_CREDENTIAL` — **do not** "upgrade" to
+  `BIOMETRIC_STRONG`, which androidx rejects on API 28-29 (hard lockout on
+  Android 9/10). `AppLockAuthenticatorTest` pins it.
+- Release builds logged the GitHub PAT and every note body to logcat via an
+  unguarded `HttpLoggingInterceptor` at `Level.BODY`. Debug-only now, Authorization redacted.
+- Plugin permission escalation: consent was collected from the registry listing,
+  capability granted from the manifest (a different file). A plugin listing no
+  permissions installed with no prompt and still got notes:read/write.
+- Removed hardcoded default repositories — every install listed the maintainer's
+  private repo names before a token was entered.
+**Sync / data**
+- Deleting a synced note never deleted its Gist/repo file: `pendingRemoteDelete`
+  was written but read by nothing, so emptying the Trash resurrected notes on the
+  next pull. Deletions are queued and drained by sync; rows survive until the
+  remote copy is confirmed gone.
+- Editor autosave wrote a stale whole-row snapshot, reverting gistId/sha assigned
+  by a concurrent sync → duplicate Gists. Sync writes are column-scoped and guarded.
+- Gist renames added a second file instead of renaming (new `remoteFilename`, DB v13).
+- Background sync never covered repository-backed notes.
+- Gist pagination, git-tree truncation detection, N+1 elimination, LIKE escaping,
+  thread-safe date formatting, OCR cache cleanup.
+- Rhino instruction budget could never fire (counter resets between observations),
+  so `while(true){}` hung the plugin engine forever.
+**Schema/tests:** DB v13 (+`remoteFilename`); `12.json`/`13.json` were never
+committed — now are, so `DatabaseMigrationTest` runs from a clean clone. Suite
+159 tests. Verified on device: migration ran on a real v12 DB with notes intact;
+app lock handed off to Android's pattern screen on a fingerprint-less tablet.
+
+### Post-v2.8 on `main` (not in the released APK)
+- `db6de48` built-in features are real plugins now: described by bundled manifests
+  in `app/src/main/assets/plugins/`, installed through the same path as a community
+  plugin (manifest, version check, consent). No `installBuiltinFeature`, no FEATURE
+  branch. They install **disabled** like any plugin; On-device AI now discloses
+  notes:read before it indexes anything. Verified side-by-side on an S24U.
+- `79b8ce9` gitignore the agent handbook (`CODEX.md`).
+- ⚠️ **The signing password was published in this file** (`## Signing keys`) until
+  2026-09-08. Redacted now, but it remains in git history. The keystore itself was
+  never committed, so the key is not compromised — but rotate the password with
+  `keytool -storepasswd` / `-keypasswd`, which changes the password **without**
+  changing the key, so signing continuity is preserved.
+
+### v2.7 SHIPPED — UI structure redesign
+⚠️ Both published assets were signed with the **Android debug key**, not the upload
+key. A build mistake; it is why v2.8 cannot install over it. The `app-debug.apk`
+asset was deleted 2026-09-07 (the updater takes the *first* `.apk` asset, so it was
+handing users a debug build that could never install).
+
+### v2.5 / v2.6 SHIPPED
+v2.6 was signed with the stray `new-upload-key.jks` (`33b83ca0…`), password lost.
 
 ### v2.4 SHIPPED (2026-07-07) — Dataview queries + in-app Task Board
 - versionCode 15 / versionName 2.4. Signed with the v1.3+ upload key
@@ -370,13 +429,21 @@ takes effect from v1.9 onward.
 
 ## Signing keys (KEEP SAFE — gitignored, not in repo)
 - ⚠️ ORIGINAL my-upload-key.jks WAS LOST (not on this machine as of 2026-07-07).
-  REGENERATED a new upload key 2026-07-07: alias `upload`, store/key password
-  `octojotter`, at repo root my-upload-key.jks. Cert SHA-256:
+  REGENERATED a new upload key 2026-07-07: alias `upload`, at repo root
+  my-upload-key.jks. Cert SHA-256:
   640a69ce998145319cc5094da93667fc804a19d7909f80eb0a83574101f17c5f.
   This is now THE key for all future updates — BACK IT UP. Installs signed with
   the old key (v1.0–v1.2) require uninstall+reinstall to move to v1.3+.
-- debug.keystore — standard debug key (android/android); also regenerated
-  2026-07-07 (was likewise absent from the fresh clone).
+  **Credentials are in the gitignored `keystore.properties` at the repo root —
+  never in this file. This repo is public.** (The store/key password was
+  published here in plaintext until 2026-09-08; see the v2.8 entry.)
+- debug.keystore — debug key (androiddebugkey/android); also regenerated
+  2026-07-07 (was likewise absent from the fresh clone). Gitignored, never
+  committed.
+- Signing history is NOT uniform — verified with apksigner 2026-09-07:
+  v2.4/v2.5 upload key `640a69ce…`; v2.6 stray key `33b83ca0…`;
+  **v2.7 the Android DEBUG key `ad1ec444…` (a build mistake, both assets)**;
+  v2.8 upload key again. v2.8 therefore cannot install over v2.6/v2.7.
 
 ## Notes
 - Build env: `JAVA_HOME=/c/Program Files/Android/Android Studio/jbr`, `ANDROID_HOME` already set.
