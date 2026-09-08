@@ -18,6 +18,10 @@
       "onSecondary": "#000000",
       "secondaryContainer": "#003333",
       "onSecondaryContainer": "#AAFFFF",
+      "tertiary": "#FF00FF",
+      "onTertiary": "#000000",
+      "tertiaryContainer": "#330033",
+      "onTertiaryContainer": "#FFAAFF",
       "background": "#000000",
       "onBackground": "#FFFFFF",
       "surface": "#000000",
@@ -27,6 +31,8 @@
       "surfaceContainer": "#0D0D0D",
       "error": "#FF5555",
       "onError": "#000000",
+      "errorContainer": "#330000",
+      "onErrorContainer": "#FFAAAA",
       "outline": "#FFFFFF",
       "outlineVariant": "#808080"
     }

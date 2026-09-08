@@ -18,6 +18,10 @@
       "onSecondary": "#FDF6E3",
       "secondaryContainer": "#D2ECEA",
       "onSecondaryContainer": "#00332F",
+      "tertiary": "#6C71C4",
+      "onTertiary": "#000000",
+      "tertiaryContainer": "#DEDFF5",
+      "onTertiaryContainer": "#26264A",
       "background": "#FDF6E3",
       "onBackground": "#073642",
       "surface": "#FDF6E3",
@@ -27,6 +31,8 @@
       "surfaceContainer": "#F5EFDC",
       "error": "#DC322F",
       "onError": "#FDF6E3",
+      "errorContainer": "#F5D6D2",
+      "onErrorContainer": "#7A2E2A",
       "outline": "#93A1A1",
       "outlineVariant": "#DDD6C1"
     }
