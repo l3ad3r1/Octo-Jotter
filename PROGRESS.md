@@ -112,9 +112,10 @@ Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add la
 - Published GitHub Release v1.0 with app-release.apk:
   https://github.com/l3ad3r1/Octo-Jotter/releases/tag/v1.0
 
-## Status: v2.8 SHIPPED (2026-09-07) — `main` is 2 commits past the v2.8 tag
+## Status: v2.9 SHIPPED (2026-09-08)
 Plugin ecosystem shipped (Phases 1–4 + dataview API), privacy sync landed in
-v2.0, in-app task board is the latest unreleased feature.
+v2.0, security/sync audit in v2.8, and a semantic graph layer + type-based
+note colors + an MD3 compliance pass in v2.9.
 
 ### v1.5 SHIPPED (2026-07-07) — community-plugin foundation (Phase 1)
 - versionCode 6 / versionName 1.5; signed with the v1.3 key.
@@ -241,7 +242,7 @@ committed — now are, so `DatabaseMigrationTest` runs from a clean clone. Suite
 159 tests. Verified on device: migration ran on a real v12 DB with notes intact;
 app lock handed off to Android's pattern screen on a fingerprint-less tablet.
 
-### Post-v2.8 on `main` (not in the released APK)
+### v2.9 SHIPPED (2026-09-08) — semantic graph, type colors, MD3 audit
 - `db6de48` built-in features are real plugins now: described by bundled manifests
   in `app/src/main/assets/plugins/`, installed through the same path as a community
   plugin (manifest, version check, consent). No `installBuiltinFeature`, no FEATURE
@@ -253,6 +254,51 @@ app lock handed off to Android's pattern screen on a fingerprint-less tablet.
   never committed, so the key is not compromised — but rotate the password with
   `keytool -storepasswd` / `-keypasswd`, which changes the password **without**
   changing the key, so signing continuity is preserved.
+- `4c76330` nine more community plugins: four themes (Nord, Gruvbox Dark, Solarized
+  Light, High Contrast Dark), four scripts (broken-link checker, frontmatter
+  generator, note stats, markdown table formatter), one snippet pack
+  (meeting-notes). `CommunityPluginRegistryTest` reads the real `plugins/` tree,
+  checks what `install()` checks, and executes every script plugin's commands in
+  the real Rhino sandbox — not just parses them.
+- `7ec6d11` Graph View gained a semantic layer, inspired by
+  [Kwipu](https://github.com/benmaster82/Kwipu): notes the on-device embedding
+  index finds similar now draw a dashed edge even with no `[[wikilink]]` between
+  them (`NoteSimilarity`, threshold 0.55, cosine on the real embedder's vectors —
+  verified by hand against a real pair: 0.20 similarity correctly produced no
+  edge). Tapping any edge asks the on-device chat model to describe the
+  relationship in one phrase; a new search action asks a grounded question over
+  all notes (RAG over the existing chunk index), with cited notes highlighted in
+  the graph and dimmed otherwise. Both degrade to plain text when On-device AI
+  isn't enabled, never error.
+- `5b53ca8` Notes auto-color by type — locked/encrypted, has a reminder, is the
+  daily note, or contains a checklist item — using the existing Keep-style
+  palette; the type color wins over a manually picked one for a note that
+  matches, the manual picker still applies to every other note.
+- `032f04c` + `52179f9`: an MD3 compliance audit (using the `material-3-skill`
+  Claude Code skill) scored the app 71/100 and every finding was fixed:
+  - Graph View had **zero accessibility semantics** — a raw Canvas with pointer
+    tap detection, invisible to TalkBack. Each note is now a semantics-only
+    overlay (no `.clickable`/`.pointerInput`, so it can't intercept real touch)
+    exposing the title as a click target plus one custom action per edge for
+    relation-labeling.
+  - The color-coded note palette (from `5b53ca8`, made "more vibrant" per
+    feedback) had a container/text-color mismatch: text used a fixed
+    `onSurfaceVariant` gray never designed for a vivid background instead of a
+    real M3 on-container pairing. Rebuilt as 16 hand-verified pairs (worst
+    case 4.53:1, WCAG AA); `SyncStatusIndicator` and the markdown H1/H2/H3
+    heading colors had the same hardcoded-hex-not-theme-aware bug and were
+    fixed the same way, via two new `OctoStatusColors` fields.
+  - `OctoShapes` was never wired into `MaterialTheme(shapes = ...)`; now is.
+  - No adaptive layout anywhere — bottom `NavigationBar` at every window size.
+    Tablet width now gets a `NavigationRail` instead (Google's medium-window
+    breakpoint, already used elsewhere in this file for bottom-bar item
+    promotion); verified live on tablet hardware in both orientations.
+  - Every theme plugin (11 shipped + the template new ones are copied from) was
+    missing 6 of 21 color roles (`tertiary`, `errorContainer`, and their
+    pairs) — silently falling back to Compose's stock scheme under any
+    installed theme. Filled in from each theme's own hue family, all 23 new
+    pairs hand-verified ≥4.5:1.
+- Suite: 192 tests, 0 failures.
 
 ### v2.7 SHIPPED — UI structure redesign
 ⚠️ Both published assets were signed with the **Android debug key**, not the upload
@@ -444,6 +490,8 @@ takes effect from v1.9 onward.
   v2.4/v2.5 upload key `640a69ce…`; v2.6 stray key `33b83ca0…`;
   **v2.7 the Android DEBUG key `ad1ec444…` (a build mistake, both assets)**;
   v2.8 upload key again. v2.8 therefore cannot install over v2.6/v2.7.
+  v2.9 is signed with the same upload key as v2.8 — updates in place, no
+  reinstall needed coming from v2.8.
 
 ## Notes
 - Build env: `JAVA_HOME=/c/Program Files/Android/Android Studio/jbr`, `ANDROID_HOME` already set.

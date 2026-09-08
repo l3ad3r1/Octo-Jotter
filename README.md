@@ -32,12 +32,19 @@ Gist.
 - 🗓️ **Daily Notes, Templates and Task Reminders** — one tap opens today's note,
   reusable templates with `{{date}}`/`{{time}}`/`{{title}}`, and a notification
   when a note's reminder falls due.
-- 🕸️ **Graph View** — see how notes connect through `[[wikilinks]]`.
+- 🕸️ **Graph View** — see how notes connect through `[[wikilinks]]`, plus a
+  semantic layer (with On-device AI): notes the embedding index finds similar
+  draw a dashed edge even with no link, tapping any edge asks the on-device
+  model to describe the relationship, and you can ask a grounded question over
+  all your notes with cited notes highlighted in the graph. Adapts to a
+  `NavigationRail` on tablet-width windows.
 - 📷 **Scan Text (OCR)** — capture a photo and pull its text into a note, on-device.
 - ⌨️ **Command Palette** — quick-action search for jumping to notes and running
   plugin commands.
-- 🎨 **Note colours**, **Light / dark / system** theming, selectable fonts, plus
-  **community theme/snippet/script plugins** (see [Community plugins](#community-plugins)).
+- 🎨 **Note colours** — pick one yourself, or let the app color-code by type
+  (locked, has a reminder, the daily note, contains a checklist) — plus
+  **Light / dark / system** theming, selectable fonts, and **community
+  theme/snippet/script plugins** (see [Community plugins](#community-plugins)).
 - 🔒 **App lock** — require your fingerprint **or your device's pattern, PIN or
   password** before the app opens. No fingerprint reader needed.
 - 🔐 **Encrypted token storage** — your GitHub Personal Access Token is stored
@@ -62,7 +69,7 @@ Gist.
 | Plugin sandbox | Mozilla Rhino (interpreted, no native code) |
 | Auth | AndroidX Biometric (biometric **or** device credential) |
 | Build | AGP 9.1.1, Gradle 9.6.1, KSP |
-| Tests | JUnit + Robolectric + Roborazzi — 159 tests |
+| Tests | JUnit + Robolectric + Roborazzi — 192 tests |
 
 **Min SDK 24 (Android 7.0) · Target/Compile SDK 36 · `applicationId` `com.l3ad3r1.octojotter`**
 
@@ -247,7 +254,7 @@ decides whether an update can install at all:
 | v2.4, v2.5 | `CN=Octo Jotter, O=l3ad3r1` `640a69ce…` | upload key |
 | v2.6 | `CN=OctoJotter, OU=Dev` `33b83ca0…` | stray key |
 | v2.7 | `CN=Android Debug` `ad1ec444…` | **debug key — a build mistake** |
-| v2.8 onward | `CN=Octo Jotter, O=l3ad3r1` `640a69ce…` | upload key |
+| v2.8, v2.9 | `CN=Octo Jotter, O=l3ad3r1` `640a69ce…` | upload key |
 
 **v2.8 cannot install over a v2.6 or v2.7 install** — Android refuses it with
 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Coming from either, export your notes
