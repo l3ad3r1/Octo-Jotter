@@ -4,6 +4,15 @@
 Clone → rename package (`com.example` → `com.l3ad3r1.octojotter`) → add launcher icon + splash → build release APK → write README/docs.
 
 ## Done
+- **Obsidian-style wikilinks (2026-09-29):** audit of the Obsidian feature list showed graph,
+  templates, command palette, properties, daily notes and backlinks already exist; the gap was
+  link syntax. New `data/markdown/WikiLinks.kt` parses `[[Target|Alias]]` / `[[Target#Heading]]`.
+  - Preview shows the alias/heading text and links to the target note (was: raw `Target|Alias`).
+  - Backlinks now also match aliased and heading links; Graph View shares the same parser.
+  - A link can resolve through the target note's `aliases:` property.
+  - Editor: typing `[[` shows matching note titles as tappable chips.
+  - NOT built or run: the authoring container had no Android SDK. `WikiLinksTest` is unrun.
+  - Not done: `![[embeds]]`, heading-scroll on `[[Note#Heading]]`, unlinked mentions, Canvas.
 - **On-device AI, Phase 0 (2026-08-09):** stood up the `:ondevice-llm` module — the
   runtime that later powers semantic search / RAG chat / completion (see
   `docs/ON-DEVICE-AI.md`). No note data leaves the device.

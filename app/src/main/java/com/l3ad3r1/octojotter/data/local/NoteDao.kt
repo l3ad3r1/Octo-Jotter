@@ -253,7 +253,9 @@ interface NoteDao {
     @Query("""
         SELECT * FROM notes
         WHERE deletedAt IS NULL
-          AND content LIKE '%[[' || :targetTitle || ']]%' ESCAPE '\'
+          AND (content LIKE '%[[' || :targetTitle || ']]%' ESCAPE '\'
+            OR content LIKE '%[[' || :targetTitle || '|%' ESCAPE '\'
+            OR content LIKE '%[[' || :targetTitle || '#%' ESCAPE '\')
           AND id != :currentNoteId
     """)
     fun getBacklinks(targetTitle: String, currentNoteId: Int): Flow<List<NoteEntity>>
