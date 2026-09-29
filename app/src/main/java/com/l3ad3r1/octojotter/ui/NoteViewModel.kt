@@ -505,13 +505,9 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     /** All non-trashed notes' id/title/wikilinks, for the Graph View screen to lay out. */
     suspend fun getGraphData(): List<com.l3ad3r1.octojotter.ui.graph.GraphNoteData> {
         val notes = repository.getAllNotes().filter { it.deletedAt == null }
-        val wikilinkRegex = Regex("""\[\[([^\]|#]+)""")
         return notes.map { note ->
-            val links = wikilinkRegex.findAll(note.content)
-                .map { it.groupValues[1].trim() }
-                .filter { it.isNotEmpty() && it != note.displayTitle }
-                .distinct()
-                .toList()
+            val links = com.l3ad3r1.octojotter.data.markdown.WikiLinks.targets(note.content)
+                .filter { it != note.displayTitle }
             val locked = note.locked || note.encrypted
             com.l3ad3r1.octojotter.ui.graph.GraphNoteData(
                 id = note.id,
@@ -1563,7 +1559,12 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     suspend fun getNoteByTitle(title: String): NoteEntity? {
-        return repository.getNoteByTitle(title)
+        // A link may name a note by one of its `aliases:` property values.
+        return repository.getNoteByTitle(title) ?: repository.getAllNotes().firstOrNull { note ->
+            note.deletedAt == null && !note.locked && !note.encrypted &&
+                com.l3ad3r1.octojotter.data.markdown.Frontmatter.parse(note.content)
+                    ?.aliases()?.any { it.equals(title, ignoreCase = true) } == true
+        }
     }
 
     // Update tags for current note

@@ -2437,6 +2437,12 @@ fun EditorScreen(
         )
     }
 
+    val allNotesForLinks by viewModel.allNotesForFolders.collectAsState()
+    val noteTitlesForLinks = remember(allNotesForLinks, noteId) {
+        allNotesForLinks.filter { it.deletedAt == null && it.id != noteId }
+            .map { it.displayTitle }.filter { it.isNotBlank() }.distinct()
+    }
+
     val backlinksFlow = remember(editorTitle, noteId) {
         viewModel.getBacklinksForNote(editorTitle, noteId)
     }
@@ -2859,6 +2865,7 @@ fun EditorScreen(
                         },
                         fontSize = editorFontSize,
                         monospace = editorMonospace,
+                        noteTitles = noteTitlesForLinks,
                         backlinksSection = backlinksSection
                     )
                   }
@@ -3033,6 +3040,7 @@ fun EditorInputs(
     onContentChanged: (TextFieldValue) -> Unit,
     fontSize: Int = EditorPreferences.DEFAULT_FONT_SIZE,
     monospace: Boolean = true,
+    noteTitles: List<String> = emptyList(),
     backlinksSection: @Composable (() -> Unit)? = null
 ) {
     // Tags and the folder live in the top bar (tag / folder icons) so the
@@ -3086,6 +3094,43 @@ fun EditorInputs(
                     .fillMaxSize()
                     .testTag("note_content_input")
             )
+        }
+        // Obsidian-style link suggestions: typing `[[` offers matching note titles.
+        val cursor = textFieldValue.selection
+        val linkQuery = if (cursor.collapsed) {
+            com.l3ad3r1.octojotter.data.markdown.WikiLinks.openQuery(textFieldValue.text.take(cursor.start))
+        } else null
+        if (linkQuery != null) {
+            val suggestions = remember(linkQuery, noteTitles) {
+                noteTitles.filter { it.contains(linkQuery.substringBefore('|').substringBefore('#'), ignoreCase = true) }
+                    .take(8)
+            }
+            if (suggestions.isNotEmpty()) {
+                androidx.compose.foundation.lazy.LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("wikilink_suggestions")
+                ) {
+                    items(suggestions.size) { index ->
+                        val title = suggestions[index]
+                        androidx.compose.material3.AssistChip(
+                            onClick = {
+                                val text = textFieldValue.text
+                                val open = text.take(cursor.start).lastIndexOf("[[")
+                                // Swallow an auto-closed "]]" already after the cursor.
+                                val tail = text.substring(cursor.start).removePrefix("]]")
+                                val inserted = "[[$title]]"
+                                onContentChanged(
+                                    TextFieldValue(
+                                        text = text.substring(0, open) + inserted + tail,
+                                        selection = TextRange(open + inserted.length)
+                                    )
+                                )
+                            },
+                            label = { Text(title, maxLines = 1) }
+                        )
+                    }
+                }
+            }
         }
         if (backlinksSection != null) {
             backlinksSection()
@@ -5113,8 +5158,9 @@ fun parseInlineStyles(text: String, colors: OctoStatusColors): AnnotatedString {
             } else if (text.startsWith("[[", i)) {
                 val end = text.indexOf("]]", i + 2)
                 if (end != -1) {
-                    val targetTitle = text.substring(i + 2, end)
-                    pushStringAnnotation(tag = "WIKILINK", annotation = targetTitle)
+                    val link = com.l3ad3r1.octojotter.data.markdown.WikiLinks.parseInner(text.substring(i + 2, end))
+                    val targetTitle = link?.display ?: text.substring(i + 2, end)
+                    pushStringAnnotation(tag = "WIKILINK", annotation = link?.target ?: targetTitle)
                     withStyle(
                         SpanStyle(
                             color = colors.wikiLink,
